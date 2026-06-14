@@ -80,10 +80,11 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { currentUser } = useAuthStore();
   const { proposals, getProposalsBySubmitter } = useProposalStore();
-  const { getPendingApprovalsByApprover } = useApprovalStore();
+  const { getPendingApprovalsByApprover, getApprovalThreshold } = useApprovalStore();
   const { projects, getProjectsByOwner } = useProjectStore();
   const { getUserTotalPoints } = usePointsStore();
   const { getUnreadNotifications } = useNotificationStore();
+  const approvalThreshold = getApprovalThreshold();
 
   const isManagerOrCommittee = useMemo(() => {
     return currentUser?.role === 'manager' || currentUser?.role === 'committee' || currentUser?.role === 'admin';
@@ -117,7 +118,7 @@ export default function Dashboard() {
       pendingApprovals.forEach((a) => {
         const proposal = proposals.find(p => p.id === a.proposalId);
         if (proposal) {
-          const isHighCost = proposal.estimatedCost > 50000;
+          const isHighCost = proposal.estimatedCost > approvalThreshold;
           list.push({
             id: `approval-${a.id}`,
             type: 'approval',

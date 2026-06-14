@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   BarChart,
   Bar,
@@ -42,6 +42,31 @@ type TimeRange = 'monthly' | 'quarterly' | 'yearly';
 
 const COLORS = ['#2f6eff', '#00c9a7', '#f85a1c', '#8b5cf6', '#f59e0b'];
 
+function getDateRange(timeRange: TimeRange): { start: Date; end: Date } {
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  let start: Date;
+
+  switch (timeRange) {
+    case 'monthly':
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      break;
+    case 'quarterly':
+      const quarter = Math.floor(now.getMonth() / 3);
+      start = new Date(now.getFullYear(), quarter * 3, 1);
+      break;
+    case 'yearly':
+      start = new Date(now.getFullYear(), 0, 1);
+      break;
+  }
+  return { start, end };
+}
+
+function isInDateRange(date: Date, start: Date, end: Date): boolean {
+  const d = new Date(date);
+  return d >= start && d <= end;
+}
+
 export default function Admin() {
   const { proposals } = useProposalStore();
   const { projects } = useProjectStore();
@@ -51,10 +76,44 @@ export default function Admin() {
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [timeRange, setTimeRange] = useState<TimeRange>('monthly');
 
+  const dateRange = useMemo(() => getDateRange(timeRange), [timeRange]);
+
+  const filterByDeptAndDate = useCallback(<T extends { department?: string; createdAt?: Date }>(
+    items: T[],
+    deptField: keyof T = 'department' as keyof T,
+    dateField: keyof T = 'createdAt' as keyof T
+  ): T[] => {
+    return items.filter((item) => {
+      if (selectedDepartment !== 'all' && item[deptField] !== selectedDepartment) {
+        return false;
+      }
+      if (item[dateField]) {
+        const itemDate = new Date(item[dateField] as unknown as Date);
+        return isInDateRange(itemDate, dateRange.start, dateRange.end);
+      }
+      return true;
+    });
+  }, [selectedDepartment, dateRange]);
+
   const filteredProposals = useMemo(() => {
-    if (selectedDepartment === 'all') return proposals;
-    return proposals.filter((p) => p.department === selectedDepartment);
-  }, [proposals, selectedDepartment]);
+    return filterByDeptAndDate(proposals);
+  }, [proposals, filterByDeptAndDate]);
+
+  const filteredProjects = useMemo(() => {
+    if (selectedDepartment === 'all') {
+      return projects.filter(p => isInDateRange(p.startDate, dateRange.start, dateRange.end));
+    }
+    return projects.filter(p => {
+      const proposal = proposals.find(prop => prop.id === p.proposalId);
+      const deptMatch = proposal?.department === selectedDepartment;
+      const dateMatch = isInDateRange(p.startDate, dateRange.start, dateRange.end);
+      return deptMatch && dateMatch;
+    });
+  }, [projects, proposals, selectedDepartment, dateRange, filterByDeptAndDate]);
+
+  const filteredRecords = useMemo(() => {
+    return records.filter(r => isInDateRange(r.createdAt, dateRange.start, dateRange.end));
+  }, [records, dateRange]);
 
   const stats = useMemo(() => {
     const totalProposals = filteredProposals.length;
@@ -63,13 +122,13 @@ export default function Admin() {
     ).length;
     const approvalRate = totalProposals > 0 ? Math.round((approvedProposals / totalProposals) * 100) : 0;
 
-    const totalProjects = projects.length;
-    const completedProjects = projects.filter((p) => p.status === 'completed').length;
+    const totalProjects = filteredProjects.length;
+    const completedProjects = filteredProjects.filter((p) => p.status === 'completed').length;
     const projectCompletionRate =
       totalProjects > 0 ? Math.round((completedProjects / totalProjects) * 100) : 0;
 
-    const totalEarnedPoints = records.filter((r) => r.type === 'earn').reduce((sum, r) => sum + r.amount, 0);
-    const totalRedeemedPoints = records.filter((r) => r.type === 'redeem').reduce((sum, r) => sum + r.amount, 0);
+    const totalEarnedPoints = filteredRecords.filter((r) => r.type === 'earn').reduce((sum, r) => sum + r.amount, 0);
+    const totalRedeemedPoints = filteredRecords.filter((r) => r.type === 'redeem').reduce((sum, r) => sum + r.amount, 0);
     const pointsRedeemRate = totalEarnedPoints > 0 ? Math.round((totalRedeemedPoints / totalEarnedPoints) * 100) : 0;
 
     return {
@@ -80,11 +139,12 @@ export default function Admin() {
       totalEarnedPoints,
       totalRedeemedPoints,
     };
-  }, [filteredProposals, projects, records]);
+  }, [filteredProposals, filteredProjects, filteredRecords]);
 
   const departmentChartData = useMemo(() => {
-    return departments.map((dept) => {
-      const deptProposals = proposals.filter((p) => p.department === dept);
+    const deptsToShow = selectedDepartment === 'all' ? departments : [selectedDepartment];
+    return deptsToShow.map((dept) => {
+      const deptProposals = filteredProposals.filter((p) => p.department === dept);
       const approved = deptProposals.filter(
         (p) => p.status === 'approved' || p.status === 'project_created'
       ).length;
@@ -94,18 +154,21 @@ export default function Admin() {
         采纳数: approved,
       };
     });
-  }, [proposals]);
+  }, [filteredProposals, selectedDepartment]);
 
   const monthlyTrendData = useMemo(() => {
-    const now = new Date();
     const months = [];
-    for (let i = 5; i >= 0; i--) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    let monthCount = 6;
+    if (timeRange === 'quarterly') monthCount = 4;
+    if (timeRange === 'yearly') monthCount = 12;
+
+    for (let i = monthCount - 1; i >= 0; i--) {
+      const date = new Date(dateRange.end.getFullYear(), dateRange.end.getMonth() - i, 1);
       const monthLabel = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59);
 
-      const monthProposals = proposals.filter((p) => {
+      const monthProposals = filteredProposals.filter((p) => {
         const pDate = new Date(p.createdAt);
         return pDate >= monthStart && pDate <= monthEnd;
       });
@@ -120,10 +183,10 @@ export default function Admin() {
       });
     }
     return months;
-  }, [proposals]);
+  }, [filteredProposals, dateRange, timeRange]);
 
   const pointsDistributionData = useMemo(() => {
-    const giftPoints = records
+    const giftPoints = filteredRecords
       .filter((r) => r.type === 'redeem')
       .filter((r) => {
         const reward = r.rewardId ? rewards.find((rw) => rw.id === r.rewardId) : null;
@@ -131,7 +194,7 @@ export default function Admin() {
       })
       .reduce((sum, r) => sum + r.amount, 0);
 
-    const trainingPoints = records
+    const trainingPoints = filteredRecords
       .filter((r) => r.type === 'redeem')
       .filter((r) => {
         const reward = r.rewardId ? rewards.find((rw) => rw.id === r.rewardId) : null;
@@ -147,11 +210,11 @@ export default function Admin() {
     if (unredeemedPoints > 0) data.push({ name: '未兑换', value: unredeemedPoints });
 
     return data.length > 0 ? data : [{ name: '暂无数据', value: 1 }];
-  }, [records, rewards, allUsers]);
+  }, [filteredRecords, rewards, allUsers]);
 
   const heatmapData = useMemo(() => {
     const keywordCount: Record<string, number> = {};
-    proposals.forEach((p) => {
+    filteredProposals.forEach((p) => {
       p.keywords.forEach((kw) => {
         keywordCount[kw] = (keywordCount[kw] || 0) + 1;
       });
@@ -165,7 +228,7 @@ export default function Admin() {
       count,
       intensity: count / maxCount,
     }));
-  }, [proposals]);
+  }, [filteredProposals]);
 
   const aiSuggestions = useMemo(() => {
     const topDept = departmentChartData
@@ -181,57 +244,83 @@ export default function Admin() {
         id: 1,
         title: '重点激励部门',
         content: `${lowDept?.department || '部分部门'}提案活跃度较低，建议组织专项创新培训活动，提升员工参与热情。`,
-        type: 'warning',
+        type: 'warning' as const,
       },
       {
         id: 2,
         title: '热门创新方向',
         content: `当前热点集中在"${hotKeywords.join('"、"')}"领域，建议设立专项创新基金，鼓励相关方向的深度探索。`,
-        type: 'success',
+        type: 'success' as const,
       },
       {
         id: 3,
         title: '积分策略优化',
         content: `当前积分兑换率为${stats.pointsRedeemRate}%，建议增加热门礼品库存，提升积分消耗速度和员工获得感。`,
-        type: 'info',
+        type: 'info' as const,
       },
       {
         id: 4,
         title: '项目跟踪建议',
         content: `项目完成率${stats.projectCompletionRate}%，建议加强对在途项目的里程碑管理，确保按时交付。`,
-        type: 'info',
+        type: 'info' as const,
       },
     ];
   }, [departmentChartData, heatmapData, stats]);
 
   const handleExport = () => {
-    const exportData = proposals.map((p) => {
-      const submitter = allUsers.find((u) => u.id === p.submitterId);
+    const deptsToShow = selectedDepartment === 'all' ? departments : [selectedDepartment];
+
+    const summaryData = deptsToShow.map((dept) => {
+      const deptProposals = filteredProposals.filter(p => p.department === dept);
+      const deptApproved = deptProposals.filter(
+        p => p.status === 'approved' || p.status === 'project_created'
+      ).length;
+      const deptProjects = filteredProjects.filter(p => {
+        const proposal = proposals.find(prop => prop.id === p.proposalId);
+        return proposal?.department === dept;
+      });
+      const deptCompleted = deptProjects.filter(p => p.status === 'completed').length;
+
+      const deptRecords = records.filter(r => {
+        const user = allUsers.find(u => u.id === r.userId);
+        return user?.department === dept && isInDateRange(r.createdAt, dateRange.start, dateRange.end);
+      });
+      const pointsEarned = deptRecords.filter(r => r.type === 'earn').reduce((sum, r) => sum + r.amount, 0);
+      const pointsRedeemed = deptRecords.filter(r => r.type === 'redeem').reduce((sum, r) => sum + r.amount, 0);
+
       return {
-        id: p.id,
-        title: p.title,
-        department: p.department,
-        submitter: submitter?.name || '-',
-        status: p.status,
-        estimatedCost: p.estimatedCost,
-        createdAt: formatDate(p.createdAt, 'YYYY-MM-DD'),
-        keywords: p.keywords.join('、'),
+        部门: dept,
+        提案总数: deptProposals.length,
+        采纳数: deptApproved,
+        采纳率: deptProposals.length > 0 ? `${Math.round((deptApproved / deptProposals.length) * 100)}%` : '0%',
+        项目总数: deptProjects.length,
+        完成项目数: deptCompleted,
+        项目完成率: deptProjects.length > 0 ? `${Math.round((deptCompleted / deptProjects.length) * 100)}%` : '0%',
+        发放积分: pointsEarned,
+        兑换积分: pointsRedeemed,
+        净剩余积分: pointsEarned - pointsRedeemed,
+        积分兑换率: pointsEarned > 0 ? `${Math.round((pointsRedeemed / pointsEarned) * 100)}%` : '0%',
+        统计周期: `${formatDate(dateRange.start, 'YYYY-MM-DD')} 至 ${formatDate(dateRange.end, 'YYYY-MM-DD')}`,
       };
     });
 
     const columns = [
-      { key: 'id', title: '提案编号' },
-      { key: 'title', title: '提案标题' },
-      { key: 'department', title: '所属部门' },
-      { key: 'submitter', title: '提交人' },
-      { key: 'status', title: '状态' },
-      { key: 'estimatedCost', title: '预估成本(元)' },
-      { key: 'createdAt', title: '提交日期' },
-      { key: 'keywords', title: '关键词' },
+      { key: '部门', title: '部门' },
+      { key: '提案总数', title: '提案总数' },
+      { key: '采纳数', title: '采纳数' },
+      { key: '采纳率', title: '采纳率' },
+      { key: '项目总数', title: '项目总数' },
+      { key: '完成项目数', title: '完成项目数' },
+      { key: '项目完成率', title: '项目完成率' },
+      { key: '发放积分', title: '发放积分' },
+      { key: '兑换积分', title: '兑换积分' },
+      { key: '净剩余积分', title: '净剩余积分' },
+      { key: '积分兑换率', title: '积分兑换率' },
+      { key: '统计周期', title: '统计周期' },
     ];
 
-    exportToCSV(exportData, columns, {
-      filename: generateFilename('月度提案报表'),
+    exportToCSV(summaryData, columns, {
+      filename: generateFilename(`月度创新报表_${selectedDepartment === 'all' ? '全部门' : selectedDepartment}`),
     });
   };
 
@@ -333,7 +422,7 @@ export default function Admin() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-card">
+        <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-card animate-fade-in-up" style={{ animationDelay: '0ms' }}>
           <div className="flex items-start justify-between">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-50">
               <BarChart3 className="h-6 w-6 text-primary-600" />
@@ -350,7 +439,7 @@ export default function Admin() {
           <p className="mt-2 text-xs text-neutral-400">较上月同期增长</p>
         </div>
 
-        <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-card">
+        <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-card animate-fade-in-up" style={{ animationDelay: '50ms' }}>
           <div className="flex items-start justify-between">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent-50">
               <CheckCircle className="h-6 w-6 text-accent-600" />
@@ -366,13 +455,13 @@ export default function Admin() {
           </p>
           <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-neutral-100">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-accent-400 to-accent-500"
+              className="h-full rounded-full bg-gradient-to-r from-accent-400 to-accent-500 transition-all duration-500"
               style={{ width: `${stats.approvalRate}%` }}
             />
           </div>
         </div>
 
-        <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-card">
+        <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-card animate-fade-in-up" style={{ animationDelay: '100ms' }}>
           <div className="flex items-start justify-between">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-warning-50">
               <Target className="h-6 w-6 text-warning-600" />
@@ -388,13 +477,13 @@ export default function Admin() {
           </p>
           <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-neutral-100">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-warning-400 to-warning-500"
+              className="h-full rounded-full bg-gradient-to-r from-warning-400 to-warning-500 transition-all duration-500"
               style={{ width: `${stats.projectCompletionRate}%` }}
             />
           </div>
         </div>
 
-        <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-card">
+        <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-card animate-fade-in-up" style={{ animationDelay: '150ms' }}>
           <div className="flex items-start justify-between">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-50">
               <Coins className="h-6 w-6 text-primary-600" />
@@ -410,7 +499,7 @@ export default function Admin() {
           </p>
           <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-neutral-100">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-primary-400 to-primary-500"
+              className="h-full rounded-full bg-gradient-to-r from-primary-400 to-primary-500 transition-all duration-500"
               style={{ width: `${stats.pointsRedeemRate}%` }}
             />
           </div>
@@ -487,7 +576,7 @@ export default function Admin() {
       <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-card">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-base font-semibold text-neutral-900">近6个月提案趋势</h3>
+            <h3 className="text-base font-semibold text-neutral-900">近{timeRange === 'monthly' ? '6个月' : timeRange === 'quarterly' ? '4个季度' : '12个月'}提案趋势</h3>
             <p className="mt-1 text-xs text-neutral-500">提案提交与采纳数量变化</p>
           </div>
         </div>
@@ -538,19 +627,23 @@ export default function Admin() {
             </div>
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
-            {heatmapData.map((item) => (
-              <div
-                key={item.keyword}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-transform hover:scale-105 ${getHeatmapColor(
-                  item.intensity
-                )}`}
-              >
-                #{item.keyword}
-                <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-xs">
-                  {item.count}
-                </span>
-              </div>
-            ))}
+            {heatmapData.length > 0 ? (
+              heatmapData.map((item) => (
+                <div
+                  key={item.keyword}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-transform hover:scale-105 ${getHeatmapColor(
+                    item.intensity
+                  )}`}
+                >
+                  #{item.keyword}
+                  <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-xs">
+                    {item.count}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-neutral-400">暂无数据</p>
+            )}
           </div>
         </div>
 

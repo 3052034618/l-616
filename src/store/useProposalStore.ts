@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Proposal, ProposalStatus } from '../types';
 import { proposals as mockProposals } from '../data/proposals';
 import { recommend, extractKeywords } from '../utils/recommend';
+import { persist } from './persist';
 
 interface ProposalFilters {
   status?: ProposalStatus;
@@ -31,7 +32,9 @@ interface ProposalState {
   findSimilarCases: (title: string, description: string, currentId?: string) => { id: string; title: string; department: string; matchRate: number; result: 'success' | 'failed' }[];
 }
 
-export const useProposalStore = create<ProposalState>((set, get) => ({
+export const useProposalStore = create<ProposalState>(
+  persist(
+    (set, get) => ({
   proposals: mockProposals,
   filters: {},
 
@@ -171,4 +174,12 @@ export const useProposalStore = create<ProposalState>((set, get) => ({
       result: ((r.item as unknown as Proposal).status === 'approved' || (r.item as unknown as Proposal).status === 'project_created') ? 'success' : 'failed',
     }));
   },
-}));
+}),
+    {
+      name: 'proposal-store',
+      partialize: (state) => ({
+        proposals: state.proposals,
+      }),
+    }
+  )
+);

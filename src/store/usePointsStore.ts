@@ -3,6 +3,7 @@ import type { PointsRecord, PointsType, Reward } from '../types';
 import { rewards as mockRewards } from '../data/rewards';
 import { calcTotalPoints } from '../utils/points';
 import { useAuthStore } from './useAuthStore';
+import { persist } from './persist';
 
 function generateRedeemCode(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -54,7 +55,9 @@ interface PointsState {
   awardProjectPoints: (userIds: string[], costSaving?: number, revenueIncrease?: number, isCompleted?: boolean, source?: string) => PointsRecord[];
 }
 
-export const usePointsStore = create<PointsState>((set, get) => ({
+export const usePointsStore = create<PointsState>(
+  persist(
+    (set, get) => ({
   records: [],
   rewards: mockRewards,
   filters: {},
@@ -239,4 +242,13 @@ export const usePointsStore = create<PointsState>((set, get) => ({
 
     return records;
   },
-}));
+}),
+    {
+      name: 'points-store',
+      partialize: (state) => ({
+        records: state.records,
+        rewards: state.rewards,
+      }),
+    }
+  )
+);

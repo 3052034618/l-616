@@ -116,8 +116,8 @@ export default function ProposalDetail() {
     if (requiredLevel === 'committee') {
       nodes.push({
         key: 'committee',
-        title: '评审委员会审批',
-        description: '评审委员会对高成本提案进行最终审核',
+        title: '创新委员会审批',
+        description: '创新委员会对高成本提案进行终审',
         status:
           committeeApproval?.status === 'approved'
             ? 'done'
@@ -334,7 +334,7 @@ export default function ProposalDetail() {
                                 {approver?.name || '未知审批人'}
                               </p>
                               <p className="text-xs text-neutral-500">
-                                {approval.level === 'manager' ? '部门经理' : '评审委员会'}
+                                {approval.level === 'manager' ? '部门经理' : '创新委员会'}
                               </p>
                             </div>
                           </div>
@@ -394,15 +394,15 @@ export default function ProposalDetail() {
               </div>
             </div>
             <div className="mt-4 pt-4 border-t border-neutral-100">
-              <p className="text-xs text-neutral-500 mb-2">审批级别说明</p>
+              <p className="text-xs text-neutral-500 mb-2">审批流程说明</p>
               <p className="text-xs text-neutral-600">
-                金额 ≤ ¥{approvalThreshold.toLocaleString()}：部门经理审批
+                金额 ≤ ¥{approvalThreshold.toLocaleString()}：部门经理直接审批
               </p>
               <p className="text-xs text-neutral-600">
-                金额 {'>'} ¥{approvalThreshold.toLocaleString()}：评审委员会审批
+                金额 {'>'} ¥{approvalThreshold.toLocaleString()}：部门经理初审 → 创新委员会终审
               </p>
               <p className="text-xs text-primary-600 font-medium mt-2">
-                本提案审批级别：{requiredLevel === 'manager' ? '部门经理审批' : '评审委员会审批'}
+                本提案审批级别：{requiredLevel === 'manager' ? '部门经理直接审批' : '部门经理初审 → 创新委员会终审'}
               </p>
             </div>
           </div>

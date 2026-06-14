@@ -284,15 +284,15 @@ export default function NewProposal() {
                       <div className="flex items-start gap-2">
                         <AlertCircle className="w-4 h-4 text-primary-500 mt-0.5 shrink-0" />
                         <div className="text-xs text-neutral-600">
-                          <p className="font-medium text-neutral-700">审批级别</p>
+                          <p className="font-medium text-neutral-700">审批流程说明</p>
                           <p className="mt-1">
-                            金额 ≤ ¥{approvalThreshold.toLocaleString()}：部门经理审批
+                            金额 ≤ ¥{approvalThreshold.toLocaleString()}：部门经理直接审批
                           </p>
                           <p>
-                            金额 {'>'} ¥{approvalThreshold.toLocaleString()}：评审委员会审批
+                            金额 {'>'} ¥{approvalThreshold.toLocaleString()}：部门经理初审 → 创新委员会终审
                           </p>
                           <p className="mt-1.5 text-primary-600 font-medium">
-                            当前提案将由：{approvalLevel === 'manager' ? '部门经理' : approvalLevel === 'committee' ? '评审委员会' : '—'} 审批
+                            当前提案将由：{approvalLevel === 'manager' ? '部门经理' : approvalLevel === 'committee' ? '创新委员会' : '—'} 审批
                           </p>
                         </div>
                       </div>

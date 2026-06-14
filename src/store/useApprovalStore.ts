@@ -1,8 +1,13 @@
 import { create } from 'zustand';
 import type { Approval, ApprovalLevel, ApprovalStatus, Proposal } from '../types';
 import { useProposalStore } from './useProposalStore';
+import { useProjectStore } from './useProjectStore';
+import { useNotificationStore } from './useNotificationStore';
+import { useAuthStore } from './useAuthStore';
+import { addDays } from '../utils/date';
+import { persist } from './persist';
 
-const MANAGER_APPROVAL_THRESHOLD = 50000;
+const MANAGER_APPROVAL_THRESHOLD = 10000;
 
 interface ApprovalState {
   approvals: Approval[];
@@ -25,7 +30,9 @@ interface ApprovalState {
   deleteApproval: (id: string) => boolean;
 }
 
-export const useApprovalStore = create<ApprovalState>((set, get) => ({
+export const useApprovalStore = create<ApprovalState>(
+  persist(
+    (set, get) => ({
   approvals: [],
 
   getApprovalThreshold: () => MANAGER_APPROVAL_THRESHOLD,
@@ -102,17 +109,100 @@ export const useApprovalStore = create<ApprovalState>((set, get) => ({
       }),
     }));
 
-    if (updated && updated.level === 'manager') {
-      const proposalApproval = get().getApprovalsByProposal(approval.proposalId);
-      const managerApproved = proposalApproval.some(
-        (a) => a.level === 'manager' && a.status === 'approved'
-      );
-      if (managerApproved) {
-        const { determineApprovalLevel } = get();
-        const proposal = useProposalStore.getState().getProposalById(approval.proposalId);
-        if (proposal && determineApprovalLevel(proposal.estimatedCost) === 'committee') {
-        }
+    if (!updated) return undefined;
+
+    const proposal = useProposalStore.getState().getProposalById(approval.proposalId);
+    if (!proposal) return updated;
+
+    const notificationStore = useNotificationStore.getState();
+    const authStore = useAuthStore.getState();
+
+    notificationStore.sendProposalApprovedNotification(
+      proposal.submitterId,
+      proposal.id,
+      proposal.title,
+      approval.level
+    );
+
+    const requiredLevel = get().determineApprovalLevel(proposal.estimatedCost);
+
+    if (updated.level === 'manager' && requiredLevel === 'committee') {
+      const committeeMembers = authStore.getUsersByRole('committee');
+      if (committeeMembers.length > 0) {
+        const nextApprover = committeeMembers[0];
+        const nextApproval = get().createApproval(proposal, nextApprover.id, 'committee');
+        notificationStore.sendApprovalPendingNotification(
+          nextApprover.id,
+          proposal.id,
+          proposal.title,
+          'committee'
+        );
+        useProposalStore.getState().updateProposalStatus(proposal.id, 'pending');
       }
+    }
+
+    const allApprovals = get().getApprovalsByProposal(proposal.id);
+    const isFullyApproved = get().isProposalApproved(proposal.id);
+
+    if (isFullyApproved) {
+      useProposalStore.getState().updateProposalStatus(proposal.id, 'approved');
+
+      const projectStore = useProjectStore.getState();
+      const startDate = new Date();
+      const endDate = addDays(startDate, 90);
+
+      const milestones = [
+        {
+          name: '项目启动与需求确认',
+          dueDate: addDays(startDate, 15),
+          description: '完成项目启动会议，确认详细需求文档',
+        },
+        {
+          name: '方案设计与评审',
+          dueDate: addDays(startDate, 30),
+          description: '完成技术方案设计，通过内部评审',
+        },
+        {
+          name: '开发与测试',
+          dueDate: addDays(startDate, 75),
+          description: '完成功能开发和测试工作',
+        },
+        {
+          name: '上线与成果交付',
+          dueDate: endDate,
+          description: '系统正式上线，提交项目成果报告',
+        },
+      ];
+
+      const newProject = projectStore.createProject({
+        proposalId: proposal.id,
+        name: proposal.title,
+        ownerId: proposal.submitterId,
+        startDate,
+        endDate,
+        milestones,
+      });
+
+      useProposalStore.getState().updateProposalStatus(proposal.id, 'project_created');
+
+      notificationStore.sendProjectAssignedNotification(
+        proposal.submitterId,
+        newProject.id,
+        newProject.projectNo,
+        newProject.name
+      );
+
+      const managers = authStore.getUsersByRole('manager');
+      managers.forEach((manager) => {
+        if (manager.department === proposal.department) {
+          notificationStore.sendProjectAssignedNotification(
+            manager.id,
+            newProject.id,
+            newProject.projectNo,
+            newProject.name
+          );
+        }
+      });
     }
 
     return updated;
@@ -132,6 +222,20 @@ export const useApprovalStore = create<ApprovalState>((set, get) => ({
         return a;
       }),
     }));
+
+    if (updated) {
+      const proposal = useProposalStore.getState().getProposalById(approval.proposalId);
+      if (proposal) {
+        useProposalStore.getState().updateProposalStatus(proposal.id, 'rejected');
+        useNotificationStore.getState().sendProposalRejectedNotification(
+          proposal.submitterId,
+          proposal.id,
+          proposal.title,
+          comment
+        );
+      }
+    }
+
     return updated;
   },
 
@@ -225,4 +329,12 @@ export const useApprovalStore = create<ApprovalState>((set, get) => ({
     }));
     return true;
   },
-}));
+}),
+    {
+      name: 'approval-store',
+      partialize: (state) => ({
+        approvals: state.approvals,
+      }),
+    }
+  )
+);

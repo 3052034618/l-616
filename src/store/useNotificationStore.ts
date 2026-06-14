@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Notification } from '../types';
 import { notifications as mockNotifications } from '../data/notifications';
+import { persist } from './persist';
 
 type NotificationType = Notification['type'];
 
@@ -30,18 +31,20 @@ interface NotificationState {
   updateNotification: (id: string, updates: Partial<Notification>) => Notification | undefined;
   deleteNotification: (id: string) => boolean;
   deleteAllByUser: (userId: string) => number;
-  sendProposalApprovedNotification: (userId: string, proposalTitle: string, projectNo: string) => Notification;
-  sendProposalRejectedNotification: (userId: string, proposalTitle: string, comment: string) => Notification;
-  sendApprovalPendingNotification: (approverId: string, proposalTitle: string, estimatedCost: number) => Notification;
+  sendProposalApprovedNotification: (userId: string, proposalId: string, proposalTitle: string, approvalLevel: string) => Notification;
+  sendProposalRejectedNotification: (userId: string, proposalId: string, proposalTitle: string, comment: string) => Notification;
+  sendApprovalPendingNotification: (approverId: string, proposalId: string, proposalTitle: string, approvalLevel: string) => Notification;
   sendMilestoneDueNotification: (userId: string, projectName: string, milestoneName: string, daysLeft: number) => Notification;
   sendMilestoneOverdueNotification: (userId: string, projectName: string, milestoneName: string) => Notification;
   sendPointsAwardedNotification: (userId: string, amount: number, source: string) => Notification;
   sendRedeemSuccessNotification: (userId: string, rewardName: string, pointsCost: number, redeemCode: string) => Notification;
-  sendProjectAssignedNotification: (userId: string, projectName: string, projectNo: string) => Notification;
+  sendProjectAssignedNotification: (userId: string, projectId: string, projectNo: string, projectName: string) => Notification;
   sendReportSubmittedNotification: (userId: string, milestoneName: string) => Notification;
 }
 
-export const useNotificationStore = create<NotificationState>((set, get) => ({
+export const useNotificationStore = create<NotificationState>(
+  persist(
+    (set, get) => ({
   notifications: mockNotifications,
   filters: {},
 
@@ -174,36 +177,37 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     return count;
   },
 
-  sendProposalApprovedNotification: (userId, proposalTitle, projectNo) => {
+  sendProposalApprovedNotification: (userId, proposalId, proposalTitle, approvalLevel) => {
     return get().createNotification({
       userId,
       type: 'success',
       title: '提案已通过审批',
-      content: `您提交的「${proposalTitle}」已通过审批，项目编号 ${projectNo} 已自动生成。`,
+      content: `您提交的「${proposalTitle}」已通过${approvalLevel === 'committee' ? '创新委员会' : '部门经理'}审批。`,
       relatedType: 'proposal',
+      relatedId: proposalId,
     });
   },
 
-  sendProposalRejectedNotification: (userId, proposalTitle, comment) => {
+  sendProposalRejectedNotification: (userId, proposalId, proposalTitle, comment) => {
     return get().createNotification({
       userId,
       type: 'error',
       title: '提案已被驳回',
       content: `很遗憾，您提交的「${proposalTitle}」未通过审批。审批意见：${comment}`,
       relatedType: 'proposal',
+      relatedId: proposalId,
     });
   },
 
-  sendApprovalPendingNotification: (approverId, proposalTitle, estimatedCost) => {
-    const formattedCost = estimatedCost >= 10000
-      ? `${(estimatedCost / 10000).toFixed(1)}万元`
-      : `${estimatedCost}元`;
+  sendApprovalPendingNotification: (approverId, proposalId, proposalTitle, approvalLevel) => {
+    const levelName = approvalLevel === 'committee' ? '创新委员会' : '部门经理';
     return get().createNotification({
       userId: approverId,
       type: 'warning',
       title: '待您审批的提案',
-      content: `您有1个待审批的提案「${proposalTitle}」，预估成本${formattedCost}，请及时处理。`,
+      content: `您有1个待${levelName}审批的提案「${proposalTitle}」，请及时处理。`,
       relatedType: 'approval',
+      relatedId: proposalId,
     });
   },
 
@@ -247,13 +251,14 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     });
   },
 
-  sendProjectAssignedNotification: (userId, projectName, projectNo) => {
+  sendProjectAssignedNotification: (userId, projectId, projectNo, projectName) => {
     return get().createNotification({
       userId,
       type: 'info',
       title: '新项目已分配给您',
       content: `项目「${projectName}」(${projectNo}) 已分配给您作为项目负责人，请及时查看项目详情。`,
       relatedType: 'project',
+      relatedId: projectId,
     });
   },
 
@@ -266,4 +271,12 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       relatedType: 'milestone',
     });
   },
-}));
+}),
+    {
+      name: 'notification-store',
+      partialize: (state) => ({
+        notifications: state.notifications,
+      }),
+    }
+  )
+);

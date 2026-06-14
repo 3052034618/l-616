@@ -80,6 +80,7 @@ export default function ApprovalDetail() {
 
   const getApprovalById = useApprovalStore((s) => s.getApprovalById);
   const getApprovalsByProposal = useApprovalStore((s) => s.getApprovalsByProposal);
+  const getApprovalThreshold = useApprovalStore((s) => s.getApprovalThreshold);
   const getProposalById = useProposalStore((s) => s.getProposalById);
   const approve = useApprovalStore((s) => s.approve);
   const reject = useApprovalStore((s) => s.reject);
@@ -130,8 +131,9 @@ export default function ApprovalDetail() {
 
     const managerApproval = allApprovals.find((a) => a.level === 'manager');
     const committeeApproval = allApprovals.find((a) => a.level === 'committee');
+    const approvalThreshold = getApprovalThreshold();
 
-    const requiredLevel = approval.level === 'committee' || proposal.estimatedCost > 50000;
+    const requiredLevel = approval.level === 'committee' || proposal.estimatedCost > approvalThreshold;
 
     if (managerApproval) {
       const approver = getUserById(managerApproval.approverId);

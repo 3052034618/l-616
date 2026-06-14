@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Project, ProjectStatus, Milestone, MilestoneStatus, ProgressReport } from '../types';
 import { projects as mockProjects } from '../data/projects';
 import { getNextProjectNo } from '../utils/projectNo';
+import { persist } from './persist';
 
 interface ProjectFilters {
   status?: ProjectStatus;
@@ -68,7 +69,9 @@ interface ProjectState {
   ) => boolean;
 }
 
-export const useProjectStore = create<ProjectState>((set, get) => ({
+export const useProjectStore = create<ProjectState>(
+  persist(
+    (set, get) => ({
   projects: mockProjects,
   filters: {},
 
@@ -339,7 +342,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     return updatedReport;
   },
 
-  deleteProgressReport: (projectId: string, milestoneId: string, reportId: string) => {
+  deleteProgressReport: (
+    projectId: string,
+    milestoneId: string,
+    reportId: string
+  ) => {
     const milestone = get().getMilestoneById(projectId, milestoneId);
     if (!milestone) return false;
 
@@ -361,4 +368,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }));
     return true;
   },
-}));
+}),
+    {
+      name: 'project-store',
+      partialize: (state) => ({
+        projects: state.projects,
+      }),
+    }
+  )
+);

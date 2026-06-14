@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { User, UserRole } from '../types';
 import { users } from '../data/users';
+import { persist } from './persist';
 
 interface AuthState {
   currentUser: User | null;
@@ -16,7 +17,9 @@ interface AuthState {
   deductUserPoints: (userId: string, points: number) => boolean;
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
+export const useAuthStore = create<AuthState>(
+  persist(
+    (set, get) => ({
   currentUser: users[0] || null,
   allUsers: users,
 
@@ -97,4 +100,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }));
     return true;
   },
-}));
+}),
+    {
+      name: 'auth-store',
+      partialize: (state) => ({
+        allUsers: state.allUsers,
+        currentUser: state.currentUser,
+      }),
+    }
+  )
+);

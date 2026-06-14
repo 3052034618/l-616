@@ -25,11 +25,11 @@ type TabType = 'pending' | 'approved';
 type SortField = 'cost' | 'time' | null;
 type SortOrder = 'asc' | 'desc';
 
-function getUrgencyLevel(cost: number): { label: string; className: string; icon: typeof AlertCircle } {
-  if (cost >= 100000) {
+function getUrgencyLevel(cost: number, threshold: number): { label: string; className: string; icon: typeof AlertCircle } {
+  if (cost >= threshold * 5) {
     return { label: '紧急', className: 'bg-red-100 text-red-700 border-red-200', icon: AlertCircle };
   }
-  if (cost >= 50000) {
+  if (cost >= threshold) {
     return { label: '较高', className: 'bg-orange-100 text-orange-700 border-orange-200', icon: AlertTriangle };
   }
   return { label: '普通', className: 'bg-green-100 text-green-700 border-green-200', icon: CheckCircle2 };
@@ -39,12 +39,13 @@ interface ApprovalItemProps {
   approval: Approval;
   proposal: Proposal;
   onClick: () => void;
+  threshold: number;
 }
 
-function ApprovalItem({ approval, proposal, onClick }: ApprovalItemProps) {
+function ApprovalItem({ approval, proposal, onClick, threshold }: ApprovalItemProps) {
   const getUserById = useAuthStore((s) => s.getUserById);
   const submitter = getUserById(proposal.submitterId);
-  const urgency = getUrgencyLevel(proposal.estimatedCost);
+  const urgency = getUrgencyLevel(proposal.estimatedCost, threshold);
   const UrgencyIcon = urgency.icon;
 
   const statusMap = {
@@ -100,7 +101,7 @@ function ApprovalItem({ approval, proposal, onClick }: ApprovalItemProps) {
             <Clock className="h-4 w-4" />
             <span>审批级别：</span>
             <span className="font-medium text-neutral-700">
-              {approval.level === 'manager' ? '部门主管' : '评审委员会'}
+              {approval.level === 'manager' ? '部门主管' : '创新委员会'}
             </span>
           </div>
         </div>
@@ -119,7 +120,9 @@ export default function Approvals() {
 
   const currentUser = useAuthStore((s) => s.currentUser);
   const getApprovalsByApprover = useApprovalStore((s) => s.getApprovalsByApprover);
+  const getApprovalThreshold = useApprovalStore((s) => s.getApprovalThreshold);
   const getProposalById = useProposalStore((s) => s.getProposalById);
+  const threshold = getApprovalThreshold();
 
   const myApprovals = useMemo(() => {
     if (!currentUser) return [];
@@ -272,6 +275,7 @@ export default function Approvals() {
                   approval={approval}
                   proposal={proposal}
                   onClick={() => navigate(`/approvals/${approval.id}`)}
+                  threshold={threshold}
                 />
               );
             })
