@@ -30,6 +30,93 @@ interface ApprovalState {
   deleteApproval: (id: string) => boolean;
 }
 
+const toDate = (d: any): Date => (d instanceof Date ? d : new Date(d));
+
+const initPendingApprovals = (): Approval[] => {
+  const { proposals } = useProposalStore.getState();
+  const { getUsersByRole } = useAuthStore.getState();
+  const approvals: Approval[] = [];
+  let idCounter = 1;
+
+  const pendingProposals = proposals.filter(p => p.status === 'pending');
+  const approvedProposals = proposals.filter(p => p.status === 'approved' || p.status === 'project_created');
+
+  approvedProposals.forEach((proposal) => {
+    const managers = getUsersByRole('manager');
+    const deptManager = managers.find(m => m.department === proposal.department) || managers[0];
+    if (deptManager) {
+      const proposalDate = toDate(proposal.createdAt);
+      approvals.push({
+        id: `a_init_${idCounter++}`,
+        proposalId: proposal.id,
+        approverId: deptManager.id,
+        level: 'manager',
+        status: 'approved',
+        comment: '系统初始审批记录',
+        createdAt: new Date(proposalDate.getTime() + 86400000),
+      });
+      if (proposal.estimatedCost > MANAGER_APPROVAL_THRESHOLD) {
+        const committee = getUsersByRole('committee');
+        if (committee.length > 0) {
+          approvals.push({
+            id: `a_init_${idCounter++}`,
+            proposalId: proposal.id,
+            approverId: committee[0].id,
+            level: 'committee',
+            status: 'approved',
+            comment: '系统初始审批记录',
+            createdAt: new Date(proposalDate.getTime() + 172800000),
+          });
+        }
+      }
+    }
+  });
+
+  pendingProposals.forEach((proposal) => {
+    const managers = getUsersByRole('manager');
+    const deptManager = managers.find(m => m.department === proposal.department) || managers[0];
+    if (deptManager) {
+      const proposalDate = toDate(proposal.createdAt);
+      if (proposal.estimatedCost <= MANAGER_APPROVAL_THRESHOLD) {
+        approvals.push({
+          id: `a_init_${idCounter++}`,
+          proposalId: proposal.id,
+          approverId: deptManager.id,
+          level: 'manager',
+          status: 'pending',
+          comment: '',
+          createdAt: new Date(),
+        });
+      } else {
+        const committee = getUsersByRole('committee');
+        const committeeApprover = committee[0];
+        if (committeeApprover) {
+          approvals.push({
+            id: `a_init_${idCounter++}`,
+            proposalId: proposal.id,
+            approverId: deptManager.id,
+            level: 'manager',
+            status: 'approved',
+            comment: '系统预设经理已通过',
+            createdAt: new Date(proposalDate.getTime() + 86400000),
+          });
+          approvals.push({
+            id: `a_init_${idCounter++}`,
+            proposalId: proposal.id,
+            approverId: committeeApprover.id,
+            level: 'committee',
+            status: 'pending',
+            comment: '',
+            createdAt: new Date(proposalDate.getTime() + 172800000),
+          });
+        }
+      }
+    }
+  });
+
+  return approvals;
+};
+
 export const useApprovalStore = create<ApprovalState>(
   persist(
     (set, get) => ({
@@ -332,9 +419,32 @@ export const useApprovalStore = create<ApprovalState>(
 }),
     {
       name: 'approval-store',
+      version: 3,
       partialize: (state) => ({
         approvals: state.approvals,
       }),
+      migrate: (_persistedState: unknown, _version: number) => {
+        return { approvals: [] };
+      },
+      onRehydrate: (state, _usedPersisted) => {
+        try {
+          const s = state as ApprovalState;
+          if (s.approvals.length === 0) {
+            setTimeout(() => {
+              try {
+                const initialApprovals = initPendingApprovals();
+                if (initialApprovals.length > 0) {
+                  useApprovalStore.setState({ approvals: initialApprovals });
+                }
+              } catch (e) {
+                console.warn('[approval-store] delayed init failed:', e);
+              }
+            }, 50);
+          }
+        } catch (e) {
+          console.warn('[approval-store] onRehydrate init failed:', e);
+        }
+      },
     }
   )
 );

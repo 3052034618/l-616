@@ -54,18 +54,24 @@ function getGreeting(): string {
   return '晚上好';
 }
 
-function formatDate(date: Date): string {
+function toDate(d: any): Date {
+  return d instanceof Date ? d : new Date(d);
+}
+
+function formatDate(date: Date | string): string {
+  const d = toDate(date);
   const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const weekday = weekdays[date.getDay()];
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const weekday = weekdays[d.getDay()];
   return `${year}年${month}月${day}日 ${weekday}`;
 }
 
-function getRelativeTime(date: Date): string {
+function getRelativeTime(date: Date | string): string {
+  const d = toDate(date);
   const now = new Date();
-  const diff = now.getTime() - new Date(date).getTime();
+  const diff = now.getTime() - d.getTime();
   const minutes = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);

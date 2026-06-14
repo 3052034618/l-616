@@ -34,7 +34,7 @@ import { useProposalStore } from '@/store/useProposalStore';
 import { useProjectStore } from '@/store/useProjectStore';
 import { usePointsStore } from '@/store/usePointsStore';
 import { useAuthStore } from '@/store/useAuthStore';
-import { exportToCSV, generateFilename } from '@/utils/export';
+import { exportToCSV, generateFilename, dataToCSV, downloadCSV } from '@/utils/export';
 import { formatDate } from '@/utils/date';
 import { departments } from '@/data/users';
 
@@ -112,8 +112,19 @@ export default function Admin() {
   }, [projects, proposals, selectedDepartment, dateRange, filterByDeptAndDate]);
 
   const filteredRecords = useMemo(() => {
-    return records.filter(r => isInDateRange(r.createdAt, dateRange.start, dateRange.end));
-  }, [records, dateRange]);
+    return records.filter(r => {
+      if (!isInDateRange(r.createdAt, dateRange.start, dateRange.end)) {
+        return false;
+      }
+      if (selectedDepartment !== 'all') {
+        const user = allUsers.find(u => u.id === r.userId);
+        if (!user || user.department !== selectedDepartment) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [records, dateRange, selectedDepartment, allUsers]);
 
   const stats = useMemo(() => {
     const totalProposals = filteredProposals.length;
@@ -202,7 +213,10 @@ export default function Admin() {
       })
       .reduce((sum, r) => sum + r.amount, 0);
 
-    const unredeemedPoints = allUsers.reduce((sum, u) => sum + u.points, 0);
+    const deptUsers = selectedDepartment === 'all'
+      ? allUsers
+      : allUsers.filter(u => u.department === selectedDepartment);
+    const unredeemedPoints = deptUsers.reduce((sum, u) => sum + u.points, 0);
 
     const data = [];
     if (giftPoints > 0) data.push({ name: '礼品兑换', value: giftPoints });
@@ -210,7 +224,7 @@ export default function Admin() {
     if (unredeemedPoints > 0) data.push({ name: '未兑换', value: unredeemedPoints });
 
     return data.length > 0 ? data : [{ name: '暂无数据', value: 1 }];
-  }, [filteredRecords, rewards, allUsers]);
+  }, [filteredRecords, rewards, allUsers, selectedDepartment]);
 
   const heatmapData = useMemo(() => {
     const keywordCount: Record<string, number> = {};
@@ -304,7 +318,7 @@ export default function Admin() {
       };
     });
 
-    const columns = [
+    const summaryColumns = [
       { key: '部门', title: '部门' },
       { key: '提案总数', title: '提案总数' },
       { key: '采纳数', title: '采纳数' },
@@ -319,9 +333,42 @@ export default function Admin() {
       { key: '统计周期', title: '统计周期' },
     ];
 
-    exportToCSV(summaryData, columns, {
-      filename: generateFilename(`月度创新报表_${selectedDepartment === 'all' ? '全部门' : selectedDepartment}`),
-    });
+    const pointsDetailData = filteredRecords
+      .slice()
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .map(r => {
+        const user = allUsers.find(u => u.id === r.userId);
+        return {
+          人员: user?.name || '-',
+          部门: user?.department || '-',
+          时间: formatDate(r.createdAt, 'YYYY-MM-DD HH:mm:ss'),
+          类型: r.type === 'earn' ? '发放' : '兑换',
+          来源或商品: r.source || '-',
+          积分: r.type === 'earn' ? r.amount : -r.amount,
+          兑换码: r.redeemCode || '-',
+        };
+      });
+
+    const pointsDetailColumns = [
+      { key: '人员', title: '人员' },
+      { key: '部门', title: '部门' },
+      { key: '时间', title: '时间' },
+      { key: '类型', title: '类型' },
+      { key: '来源或商品', title: '来源或商品' },
+      { key: '积分', title: '积分' },
+      { key: '兑换码', title: '兑换码' },
+    ];
+
+    const summaryCSV = dataToCSV(summaryData, summaryColumns);
+    const detailCSV = dataToCSV(pointsDetailData, pointsDetailColumns);
+    const combinedCSV =
+      '【部门汇总表】\r\n' +
+      summaryCSV +
+      '\r\n\r\n' +
+      '【积分发放与兑换明细】\r\n' +
+      detailCSV;
+
+    downloadCSV(combinedCSV, generateFilename(`月度创新报表_${selectedDepartment === 'all' ? '全部门' : selectedDepartment}`));
   };
 
   const getHeatmapColor = (intensity: number) => {

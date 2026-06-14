@@ -166,10 +166,11 @@ export default function NewProposal() {
 
       updateProposal(proposal.id, { status: 'pending' });
 
-      const level = determineApprovalLevel(cost);
-      const approvers = getUsersByRole(level === 'manager' ? 'manager' : 'committee');
-      if (approvers.length > 0) {
-        createApproval(proposal, approvers[0].id, level);
+      const managers = getUsersByRole('manager');
+      const deptManager = managers.find(m => m.department === formData.department);
+      const approver = deptManager || managers[0];
+      if (approver) {
+        createApproval(proposal, approver.id, 'manager');
       }
 
       navigate(`/proposals/${proposal.id}`);

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import {
   Search,
@@ -11,8 +11,9 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { users } from '@/data/users';
-import { notifications } from '@/data/notifications';
+import { useAuthStore } from '@/store/useAuthStore';
+import { useNotificationStore } from '@/store/useNotificationStore';
+import type { User } from '@/types';
 
 const breadcrumbMap: Record<string, string> = {
   '/': '工作台',
@@ -34,12 +35,24 @@ export default function Header() {
   const location = useLocation();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState(users[0]);
+  const { currentUser, login, allUsers, logout } = useAuthStore();
+  const { getNotificationsByUser, markAsRead } = useNotificationStore();
   const userMenuRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
-  const unreadCount = notifications.filter((n) => n.userId === currentUser.id && !n.isRead).length;
-  const userNotifications = notifications.filter((n) => n.userId === currentUser.id).slice(0, 5);
+  const userNotifications = useMemo(() => {
+    if (!currentUser) return [];
+    return getNotificationsByUser(currentUser.id).slice(0, 5);
+  }, [currentUser, getNotificationsByUser]);
+
+  const unreadCount = useMemo(() => {
+    if (!currentUser) return 0;
+    return getNotificationsByUser(currentUser.id).filter((n) => !n.isRead).length;
+  }, [currentUser, getNotificationsByUser]);
+
+  const switchableUsers = useMemo(() => {
+    return allUsers.filter(u => u.role === 'admin' || u.role === 'manager' || u.role === 'committee').slice(0, 6);
+  }, [allUsers]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -56,8 +69,8 @@ export default function Header() {
 
   const currentBreadcrumb = breadcrumbMap[location.pathname] || '页面';
 
-  const handleSwitchRole = (user: typeof users[0]) => {
-    setCurrentUser(user);
+  const handleSwitchRole = (user: User) => {
+    login(user.id);
     setUserMenuOpen(false);
   };
 
@@ -152,6 +165,7 @@ export default function Header() {
           )}
         </div>
 
+        {currentUser && (
         <div className="relative" ref={userMenuRef}>
           <button
             onClick={() => setUserMenuOpen(!userMenuOpen)}
@@ -193,7 +207,7 @@ export default function Header() {
                     切换角色
                   </p>
                   <div className="space-y-0.5">
-                    {users.slice(0, 4).map((user) => (
+                    {switchableUsers.map((user) => (
                       <button
                         key={user.id}
                         onClick={() => handleSwitchRole(user)}
@@ -235,7 +249,13 @@ export default function Header() {
               </div>
 
               <div className="border-t border-neutral-100 py-1">
-                <button className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                <button
+                  onClick={() => {
+                    logout();
+                    setUserMenuOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                >
                   <LogOut className="h-4 w-4" />
                   <span>退出登录</span>
                 </button>
@@ -243,6 +263,7 @@ export default function Header() {
             </div>
           )}
         </div>
+        )}
       </div>
     </header>
   );

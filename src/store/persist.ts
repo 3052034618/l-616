@@ -31,6 +31,7 @@ export interface PersistOptions<T, P extends Partial<T>> {
   deserialize?: Deserializer<StorageValue<P>>;
   version?: number;
   migrate?: (persistedState: unknown, version: number) => P;
+  onRehydrate?: (state: T, usedPersisted: boolean) => void;
 }
 
 const STORAGE_PREFIX = 'inno-mgmt:';
@@ -46,6 +47,7 @@ export function persist<T, P extends Partial<T> = Partial<T>>(
     deserialize = defaultDeserialize as Deserializer<StorageValue<P>>,
     version = 0,
     migrate,
+    onRehydrate,
   } = options;
 
   const storageKey = STORAGE_PREFIX + name;
@@ -70,6 +72,7 @@ export function persist<T, P extends Partial<T> = Partial<T>>(
       api
     );
 
+    let usedPersisted = false;
     try {
       const storageValue = localStorage.getItem(storageKey);
       if (storageValue) {
@@ -92,6 +95,7 @@ export function persist<T, P extends Partial<T> = Partial<T>>(
 
             if (hasNonEmptyData) {
               Object.assign(hydratedState, persistedState);
+              usedPersisted = true;
             } else {
               console.log(`[persist] Skipping empty state for ${name}, using mock data`);
             }
@@ -100,6 +104,14 @@ export function persist<T, P extends Partial<T> = Partial<T>>(
       }
     } catch (e) {
       console.warn(`[persist] Failed to restore state for ${name}:`, e);
+    }
+
+    if (onRehydrate) {
+      try {
+        onRehydrate(hydratedState, usedPersisted);
+      } catch (e) {
+        console.warn(`[persist] onRehydrate callback failed for ${name}:`, e);
+      }
     }
 
     return hydratedState;
