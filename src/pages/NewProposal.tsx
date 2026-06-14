@@ -293,7 +293,12 @@ export default function NewProposal() {
                             金额 {'>'} ¥{approvalThreshold.toLocaleString()}：部门经理初审 → 创新委员会终审
                           </p>
                           <p className="mt-1.5 text-primary-600 font-medium">
-                            当前提案将由：{approvalLevel === 'manager' ? '部门经理' : approvalLevel === 'committee' ? '创新委员会' : '—'} 审批
+                            当前提案：
+                            {approvalLevel === 'manager'
+                              ? '部门经理直接审批'
+                              : approvalLevel === 'committee'
+                              ? '部门经理初审 → 创新委员会终审（两级审批）'
+                              : '—'}
                           </p>
                         </div>
                       </div>

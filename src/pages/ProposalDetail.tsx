@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -21,6 +21,8 @@ import {
   ChevronRight,
   Lightbulb,
   AlertTriangle,
+  Check,
+  X,
 } from 'lucide-react';
 import { useProposalStore } from '@/store/useProposalStore';
 import { useApprovalStore } from '@/store/useApprovalStore';
@@ -58,7 +60,7 @@ export default function ProposalDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { getProposalById, updateProposal, updateProposalStatus } = useProposalStore();
-  const { getApprovalsByProposal, getCurrentApprovalLevel, determineApprovalLevel, getApprovalThreshold } = useApprovalStore();
+  const { getApprovalsByProposal, getCurrentApprovalLevel, determineApprovalLevel, getApprovalThreshold, getCurrentPendingApproval, canUserOperateApproval, approve, reject } = useApprovalStore();
   const { currentUser, getUserById } = useAuthStore();
   const { getProjectByProposal } = useProjectStore();
 
@@ -67,6 +69,16 @@ export default function ProposalDetail() {
   const submitter = useMemo(() => (proposal ? getUserById(proposal.submitterId) : undefined), [proposal, getUserById]);
   const relatedProject = useMemo(() => (id ? getProjectByProposal(id) : undefined), [id, getProjectByProposal]);
   const currentLevel = useMemo(() => (id ? getCurrentApprovalLevel(id) : null), [id, getCurrentApprovalLevel]);
+  const currentPendingApproval = useMemo(() => (id ? getCurrentPendingApproval(id) : undefined), [id, getCurrentPendingApproval]);
+  const currentApprover = useMemo(() => currentPendingApproval ? getUserById(currentPendingApproval.approverId) : undefined, [currentPendingApproval, getUserById]);
+
+  const [approvalComment, setApprovalComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const canHandleApproval = useMemo(() => {
+    if (!currentPendingApproval || !currentUser) return false;
+    return canUserOperateApproval(currentPendingApproval.id, currentUser.id);
+  }, [currentPendingApproval, currentUser, canUserOperateApproval]);
 
   const requiredLevel = useMemo(() => {
     if (!proposal) return null;
@@ -96,8 +108,8 @@ export default function ProposalDetail() {
     if (requiredLevel === 'manager' || requiredLevel === 'committee') {
       nodes.push({
         key: 'manager',
-        title: '部门经理审批',
-        description: '部门经理对提案进行审核',
+        title: '部门经理初审',
+        description: '部门经理对提案进行初步审核',
         status:
           managerApproval?.status === 'approved'
             ? 'done'
@@ -116,8 +128,8 @@ export default function ProposalDetail() {
     if (requiredLevel === 'committee') {
       nodes.push({
         key: 'committee',
-        title: '创新委员会审批',
-        description: '创新委员会对高成本提案进行终审',
+        title: '创新委员会终审',
+        description: '创新委员会对高成本提案进行最终审批',
         status:
           committeeApproval?.status === 'approved'
             ? 'done'
@@ -173,6 +185,26 @@ export default function ProposalDetail() {
     if (proposal.status === 'pending') {
       updateProposalStatus(proposal.id, 'draft');
     }
+  };
+
+  const handleApprove = () => {
+    if (!currentPendingApproval || !canHandleApproval) return;
+    setSubmitting(true);
+    setTimeout(() => {
+      approve(currentPendingApproval.id, approvalComment);
+      setSubmitting(false);
+      setApprovalComment('');
+    }, 500);
+  };
+
+  const handleReject = () => {
+    if (!currentPendingApproval || !canHandleApproval) return;
+    setSubmitting(true);
+    setTimeout(() => {
+      reject(currentPendingApproval.id, approvalComment);
+      setSubmitting(false);
+      setApprovalComment('');
+    }, 500);
   };
 
   const handleEditDraft = () => {
@@ -306,6 +338,54 @@ export default function ProposalDetail() {
             )}
           </div>
 
+          {canHandleApproval && currentPendingApproval && (
+            <div className="card p-6 border-primary-200 bg-primary-50/30">
+              <h3 className="text-sm font-semibold text-neutral-700 mb-4 flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-primary-500" />
+                审批操作
+                <span className="ml-auto text-xs font-normal text-primary-600 bg-primary-100 px-2 py-0.5 rounded-full">
+                  {currentPendingApproval.level === 'manager' ? '部门经理初审' : '创新委员会终审'}
+                </span>
+              </h3>
+              <div className="mb-4">
+                <p className="text-xs text-neutral-500 mb-1.5">审批意见（可选）</p>
+                <textarea
+                  value={approvalComment}
+                  onChange={(e) => setApprovalComment(e.target.value)}
+                  placeholder="请输入您的审批意见..."
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700 placeholder:text-neutral-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleApprove}
+                  disabled={submitting}
+                  className="flex-1 btn btn-success"
+                >
+                  {submitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4" />
+                  )}
+                  通过
+                </button>
+                <button
+                  onClick={handleReject}
+                  disabled={submitting}
+                  className="flex-1 btn btn-error"
+                >
+                  {submitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <X className="w-4 h-4" />
+                  )}
+                  驳回
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="card p-6">
             <h3 className="text-sm font-semibold text-neutral-700 mb-4 flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-warning-500" />
@@ -369,6 +449,33 @@ export default function ProposalDetail() {
         </div>
 
         <div className="space-y-6">
+          {proposal.status === 'pending' && currentPendingApproval && (
+            <div className="card p-5 border-primary-200 bg-primary-50/50">
+              <h3 className="text-sm font-semibold text-primary-700 mb-3 flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                当前审批状态
+              </h3>
+              <div className="space-y-2">
+                <p className="text-sm text-neutral-700">
+                  当前正在等待
+                  <span className="font-semibold text-primary-600 mx-1">
+                    {currentApprover?.name || '待分配'}
+                  </span>
+                  处理
+                </p>
+                <p className="text-xs text-neutral-500">
+                  审批环节：{currentPendingApproval.level === 'manager' ? '部门经理初审' : '创新委员会终审'}
+                </p>
+                {canHandleApproval && (
+                  <p className="text-xs text-green-600 font-medium mt-2 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
+                    分配给您处理，可在下方操作
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="card p-5">
             <h3 className="text-sm font-semibold text-neutral-700 mb-4">基本信息</h3>
             <div className="space-y-3">

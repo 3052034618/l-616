@@ -27,6 +27,9 @@ interface ProjectState {
     startDate: Date;
     endDate: Date;
     milestones: Omit<Milestone, 'id' | 'projectId' | 'status' | 'reports'>[];
+    expectedBenefit?: string;
+    resources?: string;
+    recommendedDepartments?: string[];
   }) => Project;
   updateProject: (id: string, updates: Partial<Project>) => Project | undefined;
   deleteProject: (id: string) => boolean;
@@ -138,6 +141,9 @@ export const useProjectStore = create<ProjectState>(
       endDate: data.endDate,
       actualBenefit: 0,
       milestones: milestones.map((m) => ({ ...m, projectId: '' })),
+      expectedBenefit: data.expectedBenefit,
+      resources: data.resources,
+      recommendedDepartments: data.recommendedDepartments,
     };
 
     newProject.milestones = milestones.map((m) => ({ ...m, projectId: newProject.id }));

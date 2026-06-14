@@ -89,6 +89,9 @@ export interface Project {
   endDate: Date;
   actualBenefit: number;
   milestones: Milestone[];
+  expectedBenefit?: string;
+  resources?: string;
+  recommendedDepartments?: string[];
 }
 
 export interface PointsRecord {

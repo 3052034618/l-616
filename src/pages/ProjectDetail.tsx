@@ -19,6 +19,10 @@ import {
   ChevronUp,
   Loader2,
   XCircle,
+  Target,
+  Package,
+  Building2,
+  Lightbulb,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDate, getDaysRemaining, isOverdue, getRelativeTime } from '@/utils/date';
@@ -617,6 +621,63 @@ export default function ProjectDetail() {
               )}
             </div>
           </div>
+
+          {(project.expectedBenefit || project.resources || (project.recommendedDepartments && project.recommendedDepartments.length > 0)) && (
+            <div className="rounded-xl border border-neutral-200 bg-white p-6">
+              <h2 className="mb-4 text-lg font-semibold text-neutral-900 flex items-center gap-2">
+                <Lightbulb className="h-5 w-5 text-amber-500" />
+                提案启动信息
+              </h2>
+              <p className="text-xs text-neutral-400 mb-4 -mt-2">
+                以下信息来自原创意提案，供项目启动参考
+              </p>
+
+              <div className="space-y-4">
+                {project.expectedBenefit && (
+                  <div>
+                    <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-neutral-600">
+                      <Target className="h-3.5 w-3.5 text-green-500" />
+                      预期收益
+                    </div>
+                    <p className="text-sm text-neutral-700 leading-relaxed bg-neutral-50 rounded-lg p-3">
+                      {project.expectedBenefit}
+                    </p>
+                  </div>
+                )}
+
+                {project.resources && (
+                  <div>
+                    <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-neutral-600">
+                      <Package className="h-3.5 w-3.5 text-blue-500" />
+                      所需资源
+                    </div>
+                    <p className="text-sm text-neutral-700 leading-relaxed bg-neutral-50 rounded-lg p-3">
+                      {project.resources}
+                    </p>
+                  </div>
+                )}
+
+                {project.recommendedDepartments && project.recommendedDepartments.length > 0 && (
+                  <div>
+                    <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-neutral-600">
+                      <Building2 className="h-3.5 w-3.5 text-purple-500" />
+                      推荐关联部门
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {project.recommendedDepartments.map((dept) => (
+                        <span
+                          key={dept}
+                          className="px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700"
+                        >
+                          {dept}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="col-span-2 rounded-xl border border-neutral-200 bg-white p-6">

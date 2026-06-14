@@ -84,7 +84,7 @@ export default function ApprovalDetail() {
   const getProposalById = useProposalStore((s) => s.getProposalById);
   const approve = useApprovalStore((s) => s.approve);
   const reject = useApprovalStore((s) => s.reject);
-  const canApproverHandle = useApprovalStore((s) => s.canApproverHandle);
+  const canUserOperateApproval = useApprovalStore((s) => s.canUserOperateApproval);
   const getUserById = useAuthStore((s) => s.getUserById);
   const currentUser = useAuthStore((s) => s.currentUser);
 
@@ -92,9 +92,10 @@ export default function ApprovalDetail() {
   const proposal = approval ? getProposalById(approval.proposalId) : undefined;
   const allApprovals = approval ? getApprovalsByProposal(approval.proposalId) : [];
   const submitter = proposal ? getUserById(proposal.submitterId) : undefined;
+  const approver = approval ? getUserById(approval.approverId) : undefined;
 
-  const canHandle = approval && proposal && currentUser
-    ? canApproverHandle(currentUser.id, currentUser.role, proposal) && approval.status === 'pending'
+  const canHandle = approval && currentUser
+    ? canUserOperateApproval(approval.id, currentUser.id)
     : false;
 
   const handleApprove = () => {
@@ -143,7 +144,7 @@ export default function ApprovalDetail() {
       else if (managerApproval.id === approval.id) status = 'current';
 
       items.push({
-        title: '部门主管审批',
+        title: '部门经理初审',
         subtitle: approver?.name || '待分配',
         status,
         time: managerApproval.status !== 'pending'
@@ -153,7 +154,7 @@ export default function ApprovalDetail() {
       });
     } else if (requiredLevel) {
       items.push({
-        title: '部门主管审批',
+        title: '部门经理初审',
         subtitle: '待审批',
         status: 'pending',
       });
@@ -168,7 +169,7 @@ export default function ApprovalDetail() {
         else if (committeeApproval.id === approval.id) status = 'current';
 
         items.push({
-          title: '评审委员会审批',
+          title: '创新委员会终审',
           subtitle: approver?.name || '待分配',
           status,
           time: committeeApproval.status !== 'pending'
@@ -178,7 +179,7 @@ export default function ApprovalDetail() {
         });
       } else {
         items.push({
-          title: '评审委员会审批',
+          title: '创新委员会终审',
           subtitle: '待审批',
           status: 'pending',
         });
@@ -231,7 +232,7 @@ export default function ApprovalDetail() {
         <div>
           <h1 className="text-2xl font-bold text-neutral-900">审批详情</h1>
           <p className="mt-1 text-sm text-neutral-500">
-            {isManagerLevel ? '部门主管级审批' : '评审委员会级审批'}
+            {isManagerLevel ? '部门经理初审' : '创新委员会终审'}
           </p>
         </div>
       </div>

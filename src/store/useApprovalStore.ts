@@ -26,6 +26,8 @@ interface ApprovalState {
   isProposalRejected: (proposalId: string) => boolean;
   getCurrentApprovalLevel: (proposalId: string) => ApprovalLevel | null;
   canApproverHandle: (approverId: string, role: string, proposal: Proposal) => boolean;
+  canUserOperateApproval: (approvalId: string, userId: string) => boolean;
+  getCurrentPendingApproval: (proposalId: string) => Approval | undefined;
   updateApproval: (id: string, updates: Partial<Approval>) => Approval | undefined;
   deleteApproval: (id: string) => boolean;
 }
@@ -235,61 +237,71 @@ export const useApprovalStore = create<ApprovalState>(
       useProposalStore.getState().updateProposalStatus(proposal.id, 'approved');
 
       const projectStore = useProjectStore.getState();
-      const startDate = new Date();
-      const endDate = addDays(startDate, 90);
+      const existingProject = projectStore.getProjectByProposal(proposal.id);
+      let targetProject = existingProject;
 
-      const milestones = [
-        {
-          name: '项目启动与需求确认',
-          dueDate: addDays(startDate, 15),
-          description: '完成项目启动会议，确认详细需求文档',
-        },
-        {
-          name: '方案设计与评审',
-          dueDate: addDays(startDate, 30),
-          description: '完成技术方案设计，通过内部评审',
-        },
-        {
-          name: '开发与测试',
-          dueDate: addDays(startDate, 75),
-          description: '完成功能开发和测试工作',
-        },
-        {
-          name: '上线与成果交付',
-          dueDate: endDate,
-          description: '系统正式上线，提交项目成果报告',
-        },
-      ];
+      if (!existingProject) {
+        const startDate = new Date();
+        const endDate = addDays(startDate, 90);
 
-      const newProject = projectStore.createProject({
-        proposalId: proposal.id,
-        name: proposal.title,
-        ownerId: proposal.submitterId,
-        startDate,
-        endDate,
-        milestones,
-      });
+        const milestones = [
+          {
+            name: '项目启动与需求确认',
+            dueDate: addDays(startDate, 15),
+            description: '完成项目启动会议，确认详细需求文档',
+          },
+          {
+            name: '方案设计与评审',
+            dueDate: addDays(startDate, 30),
+            description: '完成技术方案设计，通过内部评审',
+          },
+          {
+            name: '开发与测试',
+            dueDate: addDays(startDate, 75),
+            description: '完成功能开发和测试工作',
+          },
+          {
+            name: '上线与成果交付',
+            dueDate: endDate,
+            description: '系统正式上线，提交项目成果报告',
+          },
+        ];
+
+        targetProject = projectStore.createProject({
+          proposalId: proposal.id,
+          name: proposal.title,
+          ownerId: proposal.submitterId,
+          startDate,
+          endDate,
+          milestones,
+          expectedBenefit: proposal.expectedBenefit,
+          resources: proposal.resources,
+          recommendedDepartments: proposal.recommendedDepartments,
+        });
+      }
 
       useProposalStore.getState().updateProposalStatus(proposal.id, 'project_created');
 
-      notificationStore.sendProjectAssignedNotification(
-        proposal.submitterId,
-        newProject.id,
-        newProject.projectNo,
-        newProject.name
-      );
+      if (targetProject) {
+        notificationStore.sendProjectAssignedNotification(
+          proposal.submitterId,
+          targetProject.id,
+          targetProject.projectNo,
+          targetProject.name
+        );
 
-      const managers = authStore.getUsersByRole('manager');
-      managers.forEach((manager) => {
-        if (manager.department === proposal.department) {
-          notificationStore.sendProjectAssignedNotification(
-            manager.id,
-            newProject.id,
-            newProject.projectNo,
-            newProject.name
-          );
-        }
-      });
+        const managers = authStore.getUsersByRole('manager');
+        managers.forEach((manager) => {
+          if (manager.department === proposal.department) {
+            notificationStore.sendProjectAssignedNotification(
+              manager.id,
+              targetProject!.id,
+              targetProject!.projectNo,
+              targetProject!.name
+            );
+          }
+        });
+      }
     }
 
     return updated;
@@ -369,29 +381,31 @@ export const useApprovalStore = create<ApprovalState>(
   },
 
   canApproverHandle: (approverId: string, role: string, proposal: Proposal) => {
-    const requiredLevel = get().determineApprovalLevel(proposal.estimatedCost);
-
-    if (requiredLevel === 'manager' && (role === 'manager' || role === 'admin')) {
-      return true;
-    }
-    if (requiredLevel === 'committee' && (role === 'committee' || role === 'admin')) {
-      return true;
-    }
-
     const approvals = get().getApprovalsByProposal(proposal.id);
     const pendingApproval = approvals.find(
       (a) => a.status === 'pending' && a.approverId === approverId
     );
     if (pendingApproval) {
-      if (pendingApproval.level === 'manager' && (role === 'manager' || role === 'admin')) {
-        return true;
-      }
-      if (pendingApproval.level === 'committee' && (role === 'committee' || role === 'admin')) {
-        return true;
-      }
+      return true;
     }
-
     return false;
+  },
+
+  canUserOperateApproval: (approvalId: string, userId: string) => {
+    const approval = get().getApprovalById(approvalId);
+    if (!approval || approval.status !== 'pending') return false;
+    return approval.approverId === userId;
+  },
+
+  getCurrentPendingApproval: (proposalId: string) => {
+    const approvals = get().getApprovalsByProposal(proposalId);
+    const pendingApprovals = approvals.filter(a => a.status === 'pending');
+    pendingApprovals.sort((a, b) => {
+      if (a.level === 'manager' && b.level === 'committee') return -1;
+      if (a.level === 'committee' && b.level === 'manager') return 1;
+      return 0;
+    });
+    return pendingApprovals[0];
   },
 
   updateApproval: (id: string, updates: Partial<Approval>) => {
