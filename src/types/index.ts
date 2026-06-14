@@ -10,6 +10,8 @@ export type ProjectStatus = 'planning' | 'in_progress' | 'completed' | 'delayed'
 
 export type MilestoneStatus = 'pending' | 'in_progress' | 'completed' | 'overdue';
 
+export type TaskStatus = 'todo' | 'in_progress' | 'completed' | 'overdue';
+
 export type PointsType = 'earn' | 'redeem';
 
 export type RewardType = 'gift' | 'training';
@@ -77,6 +79,18 @@ export interface Milestone {
   reports: ProgressReport[];
 }
 
+export interface ProjectTask {
+  id: string;
+  projectId: string;
+  title: string;
+  description: string;
+  assigneeId: string;
+  dueDate: Date;
+  status: TaskStatus;
+  createdAt: Date;
+  completedAt?: Date;
+}
+
 export interface Project {
   id: string;
   projectNo: string;
@@ -89,6 +103,7 @@ export interface Project {
   endDate: Date;
   actualBenefit: number;
   milestones: Milestone[];
+  tasks: ProjectTask[];
   expectedBenefit?: string;
   resources?: string;
   recommendedDepartments?: string[];

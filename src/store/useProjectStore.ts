@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Project, ProjectStatus, Milestone, MilestoneStatus, ProgressReport } from '../types';
+import type { Project, ProjectStatus, Milestone, MilestoneStatus, ProgressReport, ProjectTask, TaskStatus } from '../types';
 import { projects as mockProjects } from '../data/projects';
 import { getNextProjectNo } from '../utils/projectNo';
 import { persist } from './persist';
@@ -70,6 +70,23 @@ interface ProjectState {
     milestoneId: string,
     reportId: string
   ) => boolean;
+  addTask: (
+    projectId: string,
+    task: Omit<ProjectTask, 'id' | 'projectId' | 'status' | 'createdAt'>
+  ) => ProjectTask | undefined;
+  updateTask: (
+    projectId: string,
+    taskId: string,
+    updates: Partial<ProjectTask>
+  ) => ProjectTask | undefined;
+  deleteTask: (projectId: string, taskId: string) => boolean;
+  updateTaskStatus: (
+    projectId: string,
+    taskId: string,
+    status: TaskStatus
+  ) => ProjectTask | undefined;
+  getTasksByAssignee: (assigneeId: string) => ProjectTask[];
+  refreshTaskOverdueStatus: (projectId: string) => void;
 }
 
 export const useProjectStore = create<ProjectState>(
@@ -141,6 +158,7 @@ export const useProjectStore = create<ProjectState>(
       endDate: data.endDate,
       actualBenefit: 0,
       milestones: milestones.map((m) => ({ ...m, projectId: '' })),
+      tasks: [],
       expectedBenefit: data.expectedBenefit,
       resources: data.resources,
       recommendedDepartments: data.recommendedDepartments,
@@ -373,6 +391,107 @@ export const useProjectStore = create<ProjectState>(
       }),
     }));
     return true;
+  },
+
+  addTask: (projectId: string, task) => {
+    const project = get().getProjectById(projectId);
+    if (!project) return undefined;
+
+    const now = new Date();
+    const dueDate = new Date(task.dueDate);
+    let status: TaskStatus = 'todo';
+    if (now > dueDate) status = 'overdue';
+
+    const newTask: ProjectTask = {
+      ...task,
+      id: `tk${String(Date.now()).slice(-6)}`,
+      projectId,
+      status,
+      createdAt: now,
+    };
+
+    set((state) => ({
+      projects: state.projects.map((p) =>
+        p.id === projectId ? { ...p, tasks: [...p.tasks, newTask] } : p
+      ),
+    }));
+
+    return newTask;
+  },
+
+  updateTask: (projectId: string, taskId: string, updates) => {
+    let updatedTask: ProjectTask | undefined;
+    set((state) => ({
+      projects: state.projects.map((p) => {
+        if (p.id !== projectId) return p;
+        return {
+          ...p,
+          tasks: p.tasks.map((t) => {
+            if (t.id === taskId) {
+              let merged: ProjectTask = { ...t, ...updates };
+              if (updates.status === 'completed') {
+                merged.completedAt = new Date();
+              } else if (updates.status) {
+                merged.completedAt = undefined;
+              }
+              updatedTask = merged;
+              return merged;
+            }
+            return t;
+          }),
+        };
+      }),
+    }));
+    return updatedTask;
+  },
+
+  deleteTask: (projectId: string, taskId: string) => {
+    const project = get().getProjectById(projectId);
+    if (!project) return false;
+    const exists = project.tasks.some((t) => t.id === taskId);
+    if (!exists) return false;
+
+    set((state) => ({
+      projects: state.projects.map((p) =>
+        p.id === projectId ? { ...p, tasks: p.tasks.filter((t) => t.id !== taskId) } : p
+      ),
+    }));
+    return true;
+  },
+
+  updateTaskStatus: (projectId: string, taskId: string, status: TaskStatus) => {
+    return get().updateTask(projectId, taskId, { status });
+  },
+
+  getTasksByAssignee: (assigneeId: string) => {
+    const all: ProjectTask[] = [];
+    get().projects.forEach((p) => {
+      p.tasks.forEach((t) => {
+        if (t.assigneeId === assigneeId) all.push(t);
+      });
+    });
+    return all;
+  },
+
+  refreshTaskOverdueStatus: (projectId: string) => {
+    const project = get().getProjectById(projectId);
+    if (!project) return;
+    const now = new Date();
+
+    set((state) => ({
+      projects: state.projects.map((p) => {
+        if (p.id !== projectId) return p;
+        return {
+          ...p,
+          tasks: p.tasks.map((t) => {
+            if (t.status === 'completed' || t.status === 'overdue') return t;
+            const due = new Date(t.dueDate);
+            if (now > due) return { ...t, status: 'overdue' as TaskStatus };
+            return t;
+          }),
+        };
+      }),
+    }));
   },
 }),
     {

@@ -68,6 +68,7 @@ export const projects: Project[] = [
         reports: [],
       },
     ],
+    tasks: [],
   },
   {
     id: 'prj002',
@@ -136,6 +137,7 @@ export const projects: Project[] = [
         ],
       },
     ],
+    tasks: [],
   },
   {
     id: 'prj003',
@@ -204,6 +206,7 @@ export const projects: Project[] = [
         reports: [],
       },
     ],
+    tasks: [],
   },
   {
     id: 'prj004',
@@ -245,6 +248,7 @@ export const projects: Project[] = [
         reports: [],
       },
     ],
+    tasks: [],
   },
   {
     id: 'prj005',
@@ -295,6 +299,7 @@ export const projects: Project[] = [
         ],
       },
     ],
+    tasks: [],
   },
   {
     id: 'prj006',
@@ -345,6 +350,7 @@ export const projects: Project[] = [
         reports: [],
       },
     ],
+    tasks: [],
   },
   {
     id: 'prj007',
@@ -386,5 +392,6 @@ export const projects: Project[] = [
         reports: [],
       },
     ],
+    tasks: [],
   },
 ];

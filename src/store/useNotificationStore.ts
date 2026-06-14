@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Notification } from '../types';
 import { notifications as mockNotifications } from '../data/notifications';
 import { persist } from './persist';
+import { formatDate } from '../utils/date';
 
 type NotificationType = Notification['type'];
 
@@ -40,6 +41,9 @@ interface NotificationState {
   sendRedeemSuccessNotification: (userId: string, rewardName: string, pointsCost: number, redeemCode: string) => Notification;
   sendProjectAssignedNotification: (userId: string, projectId: string, projectNo: string, projectName: string) => Notification;
   sendReportSubmittedNotification: (userId: string, milestoneName: string) => Notification;
+  sendTaskAssignedNotification: (userId: string, projectId: string, projectName: string, taskTitle: string, dueDate: Date) => Notification;
+  sendTaskOverdueNotification: (userId: string, projectName: string, taskTitle: string, overdueDays: number) => Notification;
+  sendMilestoneDueReminderNotification: (userId: string, projectName: string, milestoneName: string, daysLeft: number) => Notification;
 }
 
 export const useNotificationStore = create<NotificationState>(
@@ -269,6 +273,37 @@ export const useNotificationStore = create<NotificationState>(
       title: '里程碑进展报告已提交',
       content: `里程碑「${milestoneName}」的进展报告已成功提交。`,
       relatedType: 'milestone',
+    });
+  },
+
+  sendTaskAssignedNotification: (userId, projectId, projectName, taskTitle, dueDate) => {
+    return get().createNotification({
+      userId,
+      type: 'info',
+      title: '您有新的任务分配',
+      content: `项目「${projectName}」中有新任务分配给您：${taskTitle}，截止日期 ${formatDate(dueDate)}。`,
+      relatedType: 'project',
+      relatedId: projectId,
+    });
+  },
+
+  sendTaskOverdueNotification: (userId, projectName, taskTitle, overdueDays) => {
+    return get().createNotification({
+      userId,
+      type: 'warning',
+      title: '任务已逾期',
+      content: `项目「${projectName}」中的任务「${taskTitle}」已逾期 ${overdueDays} 天，请尽快处理。`,
+      relatedType: 'project',
+    });
+  },
+
+  sendMilestoneDueReminderNotification: (userId, projectName, milestoneName, daysLeft) => {
+    return get().createNotification({
+      userId,
+      type: 'warning',
+      title: '里程碑即将到期',
+      content: `项目「${projectName}」的里程碑「${milestoneName}」还有 ${daysLeft} 天到期，请及时提交进展报告。`,
+      relatedType: 'project',
     });
   },
 }),

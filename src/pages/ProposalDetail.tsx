@@ -188,12 +188,21 @@ export default function ProposalDetail() {
   };
 
   const handleApprove = () => {
-    if (!currentPendingApproval || !canHandleApproval) return;
+    if (!currentPendingApproval || !canHandleApproval || !proposal) return;
     setSubmitting(true);
     setTimeout(() => {
       approve(currentPendingApproval.id, approvalComment);
       setSubmitting(false);
       setApprovalComment('');
+
+      if (currentPendingApproval.level === 'committee') {
+        setTimeout(() => {
+          const project = useProjectStore.getState().getProjectByProposal(proposal.id);
+          if (project) {
+            navigate(`/projects/${project.id}`);
+          }
+        }, 100);
+      }
     }, 500);
   };
 

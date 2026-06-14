@@ -48,6 +48,7 @@ export default function NewProposal() {
     department: currentUser?.department || '',
   });
 
+  const [selectedRecommendedDepts, setSelectedRecommendedDepts] = useState<string[]>([]);
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -128,6 +129,14 @@ export default function NewProposal() {
     }
   };
 
+  const toggleRecommendedDept = (deptName: string) => {
+    setSelectedRecommendedDepts((prev) =>
+      prev.includes(deptName)
+        ? prev.filter((d) => d !== deptName)
+        : [...prev, deptName]
+    );
+  };
+
   const handleSaveDraft = async () => {
     if (!currentUser) return;
     setIsSaving(true);
@@ -141,6 +150,7 @@ export default function NewProposal() {
         estimatedCost: parseFloat(formData.estimatedCost) || 0,
         department: formData.department || currentUser.department,
         submitterId: currentUser.id,
+        recommendedDepartments: selectedRecommendedDepts.length > 0 ? selectedRecommendedDepts : undefined,
       });
       navigate('/proposals');
     } finally {
@@ -162,6 +172,7 @@ export default function NewProposal() {
         estimatedCost: cost,
         department: formData.department,
         submitterId: currentUser.id,
+        recommendedDepartments: selectedRecommendedDepts.length > 0 ? selectedRecommendedDepts : undefined,
       });
 
       updateProposal(proposal.id, { status: 'pending' });
@@ -182,6 +193,9 @@ export default function NewProposal() {
   useEffect(() => {
     if (recommendedDepts.length > 0 && !formData.department) {
       setFormData((prev) => ({ ...prev, department: recommendedDepts[0].name }));
+    }
+    if (recommendedDepts.length > 0 && selectedRecommendedDepts.length === 0) {
+      setSelectedRecommendedDepts(recommendedDepts.map((d) => d.name));
     }
   }, [recommendedDepts]);
 
@@ -360,35 +374,52 @@ export default function NewProposal() {
               <p className="text-sm font-medium text-neutral-700 mb-3 flex items-center gap-1.5">
                 <Building2 className="w-4 h-4 text-primary-500" />
                 关联部门推荐
+                <span className="text-xs font-normal text-neutral-400 ml-1">（勾选后随提案保存）</span>
               </p>
               {recommendedDepts.length === 0 ? (
                 <p className="text-sm text-neutral-400">请先输入标题或描述以获取推荐</p>
               ) : (
                 <div className="space-y-2">
-                  {recommendedDepts.map((dept) => (
-                    <div
-                      key={dept.name}
-                      className={cn(
-                        'flex items-center justify-between p-2.5 rounded-lg border transition-all',
-                        formData.department === dept.name
-                          ? 'border-primary-300 bg-primary-50'
-                          : 'border-neutral-100 bg-neutral-50 hover:border-neutral-200'
-                      )}
-                    >
-                      <span className="text-sm font-medium text-neutral-700">{dept.name}</span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 h-1.5 rounded-full bg-neutral-200 overflow-hidden">
+                  {recommendedDepts.map((dept) => {
+                    const isSelected = selectedRecommendedDepts.includes(dept.name);
+                    return (
+                      <div
+                        key={dept.name}
+                        onClick={() => toggleRecommendedDept(dept.name)}
+                        className={cn(
+                          'flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer',
+                          isSelected
+                            ? 'border-primary-400 bg-primary-50 ring-2 ring-primary-100'
+                            : 'border-neutral-100 bg-neutral-50 hover:border-neutral-200'
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
                           <div
-                            className="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all duration-500"
-                            style={{ width: `${dept.matchRate}%` }}
-                          />
+                            className={cn(
+                              'w-4 h-4 rounded border flex items-center justify-center transition-all',
+                              isSelected
+                                ? 'bg-primary-500 border-primary-500'
+                                : 'border-neutral-300 bg-white'
+                            )}
+                          >
+                            {isSelected && <CheckCircle2 className="w-3 h-3 text-white" />}
+                          </div>
+                          <span className="text-sm font-medium text-neutral-700">{dept.name}</span>
                         </div>
-                        <span className="text-xs font-medium text-neutral-500 w-8 text-right">
-                          {dept.matchRate}%
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-1.5 rounded-full bg-neutral-200 overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all duration-500"
+                              style={{ width: `${dept.matchRate}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-medium text-neutral-500 w-8 text-right">
+                            {dept.matchRate}%
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

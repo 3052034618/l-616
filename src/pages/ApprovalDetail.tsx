@@ -21,6 +21,7 @@ import { formatDate } from '@/utils/date';
 import { useApprovalStore } from '@/store/useApprovalStore';
 import { useProposalStore } from '@/store/useProposalStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useProjectStore } from '@/store/useProjectStore';
 
 
 interface TimelineItemProps {
@@ -87,6 +88,7 @@ export default function ApprovalDetail() {
   const canUserOperateApproval = useApprovalStore((s) => s.canUserOperateApproval);
   const getUserById = useAuthStore((s) => s.getUserById);
   const currentUser = useAuthStore((s) => s.currentUser);
+  const getProjectByProposal = useProjectStore((s) => s.getProjectByProposal);
 
   const approval = id ? getApprovalById(id) : undefined;
   const proposal = approval ? getProposalById(approval.proposalId) : undefined;
@@ -99,22 +101,34 @@ export default function ApprovalDetail() {
     : false;
 
   const handleApprove = () => {
-    if (!approval || !canHandle) return;
+    if (!approval || !canHandle || !proposal) return;
     setSubmitting(true);
     setTimeout(() => {
       approve(approval.id, comment);
       setSubmitting(false);
-      navigate('/approvals');
+
+      if (approval.level === 'committee') {
+        setTimeout(() => {
+          const project = getProjectByProposal(proposal.id);
+          if (project) {
+            navigate(`/projects/${project.id}`);
+          } else {
+            navigate(`/proposals/${proposal.id}`);
+          }
+        }, 100);
+      } else {
+        navigate(`/proposals/${proposal.id}`);
+      }
     }, 500);
   };
 
   const handleReject = () => {
-    if (!approval || !canHandle) return;
+    if (!approval || !canHandle || !proposal) return;
     setSubmitting(true);
     setTimeout(() => {
       reject(approval.id, comment);
       setSubmitting(false);
-      navigate('/approvals');
+      navigate(`/proposals/${proposal.id}`);
     }, 500);
   };
 

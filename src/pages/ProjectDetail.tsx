@@ -23,13 +23,21 @@ import {
   Package,
   Building2,
   Lightbulb,
+  ListTodo,
+  Plus,
+  Wand2,
+  Check,
+  X,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDate, getDaysRemaining, isOverdue, getRelativeTime } from '@/utils/date';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { usePointsStore } from '@/store/usePointsStore';
-import type { Milestone, MilestoneStatus, ProgressReport } from '@/types';
+import { useProposalStore } from '@/store/useProposalStore';
+import { useNotificationStore } from '@/store/useNotificationStore';
+import type { Milestone, MilestoneStatus, ProgressReport, ProjectTask, TaskStatus } from '@/types';
 
 function getMilestoneStatusStyle(status: MilestoneStatus): {
   label: string;
@@ -376,6 +384,127 @@ function AwardPointsModal({ isOpen, onClose, onConfirm, pointsBreakdown, project
   );
 }
 
+function getTaskStatusStyle(status: TaskStatus): { label: string; className: string; icon: typeof Circle } {
+  switch (status) {
+    case 'completed':
+      return { label: '已完成', className: 'bg-green-100 text-green-700', icon: CheckCircle2 };
+    case 'in_progress':
+      return { label: '进行中', className: 'bg-blue-100 text-blue-700', icon: Clock };
+    case 'overdue':
+      return { label: '已逾期', className: 'bg-red-100 text-red-700', icon: XCircle };
+    default:
+      return { label: '待办', className: 'bg-neutral-100 text-neutral-600', icon: Circle };
+  }
+}
+
+interface AddTaskModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (data: { title: string; description: string; assigneeId: string; dueDate: Date }) => void;
+  users: Array<{ id: string; name: string; department: string }>;
+  defaultTitle?: string;
+}
+
+function AddTaskModal({ isOpen, onClose, onSubmit, users, defaultTitle = '' }: AddTaskModalProps) {
+  const [title, setTitle] = useState(defaultTitle);
+  const [description, setDescription] = useState('');
+  const [assigneeId, setAssigneeId] = useState(users[0]?.id || '');
+  const [dueDate, setDueDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().slice(0, 10);
+  });
+  const [submitting, setSubmitting] = useState(false);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = () => {
+    if (!title.trim() || !assigneeId || !dueDate) return;
+    setSubmitting(true);
+    setTimeout(() => {
+      onSubmit({
+        title: title.trim(),
+        description: description.trim(),
+        assigneeId,
+        dueDate: new Date(dueDate),
+      });
+      setSubmitting(false);
+      setTitle('');
+      setDescription('');
+      setAssigneeId(users[0]?.id || '');
+      const d = new Date();
+      d.setDate(d.getDate() + 7);
+      setDueDate(d.toISOString().slice(0, 10));
+      onClose();
+    }, 300);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-neutral-200 p-5">
+          <div className="flex items-center gap-2">
+            <ListTodo className="h-5 w-5 text-indigo-600" />
+            <h3 className="text-lg font-semibold text-neutral-900">新建任务</h3>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1 text-neutral-400 transition-all hover:bg-neutral-100 hover:text-neutral-600">
+            <XCircle className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="space-y-4 p-5">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-neutral-700">任务标题 <span className="text-red-500">*</span></label>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="请输入任务标题"
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-neutral-700">任务描述</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="请输入任务描述（可选）"
+              rows={3}
+              className="w-full resize-none rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700 placeholder:text-neutral-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-neutral-700">负责人 <span className="text-red-500">*</span></label>
+              <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className="input">
+                <option value="">请选择</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name} · {u.department}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-neutral-700">截止日期 <span className="text-red-500">*</span></label>
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="input" />
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-3 border-t border-neutral-200 p-5">
+          <button onClick={onClose} className="flex-1 rounded-lg border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-700 transition-all hover:bg-neutral-50">
+            取消
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!title.trim() || !assigneeId || !dueDate || submitting}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+            创建
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function getStatusStyle(status: string): { label: string; className: string; barColor: string } {
   switch (status) {
     case 'planning':
@@ -419,16 +548,30 @@ export default function ProjectDetail() {
   const [expandedReportId, setExpandedReportId] = useState<string | null>(null);
   const [awardModalOpen, setAwardModalOpen] = useState(false);
   const [pointsAwarded, setPointsAwarded] = useState(false);
+  const [addTaskModalOpen, setAddTaskModalOpen] = useState(false);
+  const [pendingDefaultTaskTitle, setPendingDefaultTaskTitle] = useState('');
 
   const getProjectById = useProjectStore((s) => s.getProjectById);
   const addProgressReport = useProjectStore((s) => s.addProgressReport);
+  const addTask = useProjectStore((s) => s.addTask);
+  const updateTaskStatus = useProjectStore((s) => s.updateTaskStatus);
+  const deleteTask = useProjectStore((s) => s.deleteTask);
+  const refreshTaskOverdueStatus = useProjectStore((s) => s.refreshTaskOverdueStatus);
   const getUserById = useAuthStore((s) => s.getUserById);
+  const allUsers = useAuthStore((s) => s.allUsers);
   const currentUser = useAuthStore((s) => s.currentUser);
   const calculateProjectPoints = usePointsStore((s) => s.calculateProjectPoints);
   const awardProjectPoints = usePointsStore((s) => s.awardProjectPoints);
+  const getProposalById = useProposalStore((s) => s.getProposalById);
+  const sendTaskAssignedNotification = useNotificationStore((s) => s.sendTaskAssignedNotification);
 
   const project = id ? getProjectById(id) : undefined;
   const owner = project ? getUserById(project.ownerId) : undefined;
+  const proposal = project ? getProposalById(project.proposalId) : undefined;
+  const isOwner = currentUser?.id === project?.ownerId;
+
+  const tasks = project?.tasks || [];
+  const completedTasksCount = tasks.filter((t) => t.status === 'completed').length;
 
   const activeMilestone = project?.milestones.find((m) => m.id === activeMilestoneId);
 
@@ -472,6 +615,50 @@ export default function ProjectDetail() {
 
   const toggleReport = (milestoneId: string) => {
     setExpandedReportId(expandedReportId === milestoneId ? null : milestoneId);
+  };
+
+  const handleAddTask = (data: { title: string; description: string; assigneeId: string; dueDate: Date }) => {
+    if (!project) return;
+    const newTask = addTask(project.id, {
+      title: data.title,
+      description: data.description,
+      assigneeId: data.assigneeId,
+      dueDate: data.dueDate,
+    });
+    if (newTask && newTask.assigneeId !== currentUser?.id) {
+      sendTaskAssignedNotification(newTask.assigneeId, project.id, project.name, newTask.title, newTask.dueDate);
+    }
+  };
+
+  const handleUpdateTaskStatus = (taskId: string, status: TaskStatus) => {
+    if (!project) return;
+    updateTaskStatus(project.id, taskId, status);
+  };
+
+  const handleDeleteTask = (taskId: string) => {
+    if (!project) return;
+    deleteTask(project.id, taskId);
+  };
+
+  const handleBreakdownTasksFromProposal = () => {
+    if (!project) return;
+    const titles: string[] = [];
+    if (proposal?.expectedBenefit) titles.push(`落地预期收益：${proposal.expectedBenefit.slice(0, 20)}${proposal.expectedBenefit.length > 20 ? '...' : ''}`);
+    if (proposal?.resources) titles.push(`协调落实资源：${proposal.resources.slice(0, 20)}${proposal.resources.length > 20 ? '...' : ''}`);
+    if (proposal?.recommendedDepartments && proposal.recommendedDepartments.length > 0) {
+      proposal.recommendedDepartments.forEach((dept) => {
+        titles.push(`与${dept}对接协作事宜`);
+      });
+    }
+    titles.push(`制定项目详细里程碑计划`);
+    titles.push(`组织项目启动会`);
+    setPendingDefaultTaskTitle(titles[0] || '');
+    setAddTaskModalOpen(true);
+  };
+
+  const handleOpenAddTask = () => {
+    setPendingDefaultTaskTitle('');
+    setAddTaskModalOpen(true);
   };
 
   if (!project) {
@@ -701,6 +888,158 @@ export default function ProjectDetail() {
             ))}
           </div>
         </div>
+
+        <div className="col-span-2 rounded-xl border border-neutral-200 bg-white p-6">
+          <div className="mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold text-neutral-900">任务清单</h2>
+              <span className="text-sm text-neutral-500">
+                {completedTasksCount}/{tasks.length} 已完成
+              </span>
+              {tasks.length > 0 && (
+                <div className="ml-2 w-24 h-1.5 rounded-full bg-neutral-100 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-primary-500 to-accent-500 transition-all duration-500"
+                    style={{ width: `${tasks.length > 0 ? Math.round((completedTasksCount / tasks.length) * 100) : 0}%` }}
+                  />
+                </div>
+              )}
+            </div>
+            {isOwner && (
+              <div className="flex gap-2">
+                {proposal && tasks.length === 0 && (
+                  <button
+                    onClick={handleBreakdownTasksFromProposal}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 transition-all hover:bg-amber-100"
+                  >
+                    <Wand2 className="w-4 h-4" />
+                    从提案一键拆任务
+                  </button>
+                )}
+                <button
+                  onClick={handleOpenAddTask}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition-all hover:bg-indigo-700"
+                >
+                  <Plus className="w-4 h-4" />
+                  新建任务
+                </button>
+              </div>
+            )}
+          </div>
+
+          {tasks.length === 0 ? (
+            <div className="py-12 text-center border border-dashed border-neutral-200 rounded-xl">
+              <ListTodo className="w-10 h-10 text-neutral-300 mx-auto mb-2" />
+              <p className="text-sm text-neutral-400 mb-3">暂无任务</p>
+              {isOwner && proposal && (
+                <button
+                  onClick={handleBreakdownTasksFromProposal}
+                  className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                >
+                  <Wand2 className="w-4 h-4" />
+                  从提案启动信息一键拆分任务
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {tasks.map((task) => {
+                const assignee = getUserById(task.assigneeId);
+                const statusStyle = getTaskStatusStyle(task.status);
+                const StatusIcon = statusStyle.icon;
+                const overdue = task.status === 'overdue' || (task.status !== 'completed' && isOverdue(task.dueDate));
+                const canEdit = isOwner || currentUser?.id === task.assigneeId;
+
+                return (
+                  <div
+                    key={task.id}
+                    className={cn(
+                      'flex items-start gap-3 p-4 rounded-xl border transition-all',
+                      overdue ? 'border-red-200 bg-red-50/30' : 'border-neutral-100 bg-neutral-50/40 hover:bg-neutral-50'
+                    )}
+                  >
+                    <div className="mt-0.5">
+                      {canEdit && task.status !== 'completed' ? (
+                        <button
+                          onClick={() => handleUpdateTaskStatus(task.id, 'completed')}
+                          className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-neutral-300 hover:border-green-500 hover:bg-green-50 transition-all"
+                          title="标记完成"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5 text-transparent group-hover:text-green-600" />
+                        </button>
+                      ) : (
+                        <div className={cn('flex h-6 w-6 items-center justify-center rounded-full', task.status === 'completed' ? 'bg-green-500' : 'bg-neutral-200')}>
+                          <StatusIcon className={cn('h-3.5 w-3.5', task.status === 'completed' ? 'text-white' : 'text-neutral-500')} />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <h4 className={cn(
+                          'font-medium text-sm',
+                          task.status === 'completed' ? 'text-neutral-400 line-through' : 'text-neutral-800'
+                        )}>
+                          {task.title}
+                        </h4>
+                        <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', statusStyle.className)}>
+                          {statusStyle.label}
+                        </span>
+                        {overdue && task.status !== 'completed' && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-100 text-red-700 px-2 py-0.5 text-xs font-medium">
+                            <AlertCircle className="w-3 h-3" />
+                            已逾期
+                          </span>
+                        )}
+                      </div>
+                      {task.description && (
+                        <p className={cn('text-xs mt-1 line-clamp-2', task.status === 'completed' ? 'text-neutral-400' : 'text-neutral-500')}>
+                          {task.description}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-3 mt-2 text-xs text-neutral-500">
+                        {assignee && (
+                          <span className="inline-flex items-center gap-1">
+                            <User className="w-3 h-3" />
+                            {assignee.name}
+                          </span>
+                        )}
+                        <span className="inline-flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {formatDate(task.dueDate, 'YYYY-MM-DD')}
+                        </span>
+                      </div>
+                    </div>
+
+                    {canEdit && (
+                      <div className="flex items-center gap-1">
+                        {task.status !== 'completed' && (
+                          <select
+                            value={task.status}
+                            onChange={(e) => handleUpdateTaskStatus(task.id, e.target.value as TaskStatus)}
+                            className="text-xs rounded-md border border-neutral-200 bg-white px-2 py-1 text-neutral-600 focus:outline-none focus:border-indigo-300"
+                          >
+                            <option value="todo">待办</option>
+                            <option value="in_progress">进行中</option>
+                          </select>
+                        )}
+                        {isOwner && (
+                          <button
+                            onClick={() => handleDeleteTask(task.id)}
+                            className="p-1.5 rounded-md text-neutral-400 hover:bg-red-50 hover:text-red-500 transition-all"
+                            title="删除任务"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       <ReportModal
@@ -716,6 +1055,14 @@ export default function ProjectDetail() {
         onConfirm={handleAwardPoints}
         pointsBreakdown={pointsBreakdown}
         projectName={project.name}
+      />
+
+      <AddTaskModal
+        isOpen={addTaskModalOpen}
+        onClose={() => setAddTaskModalOpen(false)}
+        onSubmit={handleAddTask}
+        users={allUsers.map((u) => ({ id: u.id, name: u.name, department: u.department }))}
+        defaultTitle={pendingDefaultTaskTitle}
       />
     </div>
   );

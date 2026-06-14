@@ -217,8 +217,13 @@ function FlowRecordItem({ proposal, onClick, threshold }: FlowRecordItemProps) {
                   : `待处理 · ${getUserById(managerApproval.approverId)?.name || '待分配'}`
                 : '等待中'}
             </p>
+            {(managerApproval?.status === 'approved' || managerApproval?.status === 'rejected') && (
+              <p className="text-xs text-neutral-400 mt-0.5">
+                处理时间：{formatDate(managerApproval.createdAt, 'YYYY-MM-DD HH:mm')}
+              </p>
+            )}
             {managerApproval?.comment && (
-              <p className="text-xs text-neutral-400 mt-1 line-clamp-1">
+              <p className="text-xs text-neutral-400 mt-1 line-clamp-2">
                 意见：{managerApproval.comment}
               </p>
             )}
@@ -243,8 +248,13 @@ function FlowRecordItem({ proposal, onClick, threshold }: FlowRecordItemProps) {
                     : `待处理 · ${getUserById(committeeApproval.approverId)?.name || '待分配'}`
                   : '等待初审通过'}
               </p>
+              {(committeeApproval?.status === 'approved' || committeeApproval?.status === 'rejected') && (
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  处理时间：{formatDate(committeeApproval.createdAt, 'YYYY-MM-DD HH:mm')}
+                </p>
+              )}
               {committeeApproval?.comment && (
-                <p className="text-xs text-neutral-400 mt-1 line-clamp-1">
+                <p className="text-xs text-neutral-400 mt-1 line-clamp-2">
                   意见：{committeeApproval.comment}
                 </p>
               )}

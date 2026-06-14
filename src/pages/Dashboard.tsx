@@ -112,11 +112,12 @@ export default function Dashboard() {
   const todos = useMemo(() => {
     const list: Array<{
       id: string;
-      type: 'approval' | 'milestone' | 'notification';
+      type: 'approval' | 'milestone' | 'notification' | 'task';
       title: string;
       description: string;
       urgency: 'high' | 'medium' | 'low';
       createdAt: Date;
+      navigatePath?: string;
     }> = [];
 
     if (currentUser) {
@@ -132,6 +133,7 @@ export default function Dashboard() {
             description: `预估成本 ¥${proposal.estimatedCost.toLocaleString()} · ${proposal.department}`,
             urgency: isHighCost ? 'high' : 'medium',
             createdAt: a.createdAt,
+            navigatePath: `/approvals/${a.id}`,
           });
         }
       });
@@ -151,14 +153,60 @@ export default function Dashboard() {
                 description: `项目「${project.name}」· ${diffDays < 0 ? `已逾期${Math.abs(diffDays)}天` : `还剩${diffDays}天`}`,
                 urgency: diffDays <= 0 ? 'high' : diffDays <= 1 ? 'high' : 'medium',
                 createdAt: dueDate,
+                navigatePath: `/projects/${project.id}`,
               });
+            }
+
+            if (ms.status === 'in_progress') {
+              const lastReport = ms.reports[ms.reports.length - 1];
+              const lastTime = lastReport ? new Date(lastReport.submittedAt) : new Date(ms.dueDate);
+              const daysSince = Math.floor((now.getTime() - lastTime.getTime()) / 86400000);
+              if (daysSince >= 7) {
+                list.push({
+                  id: `milestone-noprogress-${ms.id}`,
+                  type: 'milestone',
+                  title: `里程碑进展待更新：${ms.name}`,
+                  description: `项目「${project.name}」· 已${daysSince}天未提交进展报告`,
+                  urgency: 'high',
+                  createdAt: new Date(now.getTime() - daysSince * 86400000),
+                  navigatePath: `/projects/${project.id}`,
+                });
+              }
             }
           }
         });
       });
 
+      const myTasks = useProjectStore.getState().getTasksByAssignee(currentUser.id);
+      myTasks.forEach((task) => {
+        if (task.status === 'completed') return;
+        const dueDate = new Date(task.dueDate);
+        const now = new Date();
+        const diffDays = Math.ceil((dueDate.getTime() - now.getTime()) / 86400000);
+        if (task.status === 'overdue' || diffDays <= 3) {
+          const project = useProjectStore.getState().getProjectById(task.projectId);
+          list.push({
+            id: `task-${task.id}`,
+            type: 'task',
+            title: `待办任务：${task.title}`,
+            description: project ? `项目「${project.name}」· ${task.status === 'overdue' || diffDays < 0 ? `已逾期${Math.abs(diffDays)}天` : `还剩${diffDays}天`}` : '待处理',
+            urgency: task.status === 'overdue' || diffDays <= 0 ? 'high' : diffDays <= 1 ? 'high' : 'medium',
+            createdAt: dueDate,
+            navigatePath: `/projects/${task.projectId}`,
+          });
+        }
+      });
+
       const unread = getUnreadNotifications(currentUser.id).slice(0, 5);
       unread.forEach((n) => {
+        let navigatePath: string | undefined;
+        if (n.relatedType === 'proposal' && n.relatedId) {
+          navigatePath = `/proposals/${n.relatedId}`;
+        } else if (n.relatedType === 'approval' && n.relatedId) {
+          navigatePath = `/proposals/${n.relatedId}`;
+        } else if (n.relatedType === 'project' && n.relatedId) {
+          navigatePath = `/projects/${n.relatedId}`;
+        }
         list.push({
           id: `notification-${n.id}`,
           type: 'notification',
@@ -166,6 +214,7 @@ export default function Dashboard() {
           description: n.content,
           urgency: n.type === 'error' ? 'high' : n.type === 'warning' ? 'medium' : 'low',
           createdAt: n.createdAt,
+          navigatePath,
         });
       });
     }
@@ -467,7 +516,10 @@ export default function Dashboard() {
                   todos.map((todo) => (
                     <div
                       key={todo.id}
-                      className={`px-6 py-4 border-l-4 ${urgencyStyles[todo.urgency]} hover:bg-neutral-50 transition-colors cursor-pointer group`}
+                      onClick={() => {
+                        if (todo.navigatePath) navigate(todo.navigatePath);
+                      }}
+                      className={`px-6 py-4 border-l-4 ${urgencyStyles[todo.urgency]} hover:bg-neutral-50 transition-colors ${todo.navigatePath ? 'cursor-pointer' : ''} group`}
                     >
                       <div className="flex items-start gap-4">
                         <div className="mt-0.5">
